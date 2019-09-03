@@ -1,6 +1,8 @@
 import serial
 import time
 
+# Short library for arduino stimulation commands, this will allow the user to input a command and return the result
+
 def handshake(ser): # Clear initial buffer
     ser.readline()
 
@@ -54,19 +56,3 @@ def set_pulse_width(ser,N):
 def set_period(ser,N):
     string = "p" + str(N)
     send_string(ser,string)
-
-
-ser = serial.Serial('COM4', 9600)
-handshake(ser)
-if(ser.in_waiting > 0): ser.readline()
-
-send_command(ser,'s',12)
-print("After Stimulus Set")
-send_command(ser,'p',34)
-print("After frequency Set")
-send_command(ser,'w')
-print("After switcher set")
-send_command(ser,'S')
-
-
-ser.close()
