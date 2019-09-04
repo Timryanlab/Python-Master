@@ -4,7 +4,8 @@ import time
 # Short library for arduino stimulation commands, this will allow the user to input a command and return the result
 
 def handshake(ser): # Clear initial buffer
-    ser.readline()
+    string = ser.readline()
+    return string[0:-1]
 
 def send_command(ser,cmd,var = None): # Switch Statement
     switch = {
@@ -17,13 +18,15 @@ def send_command(ser,cmd,var = None): # Switch Statement
         "P": set_pulse_width,
         "p": set_period,
     }
-    func = switch.get(cmd,lambda:'No Dice')
+    func = switch.get(cmd,send_string)
     if(var != None): 
         func(ser,var)
     else:
         func(ser)
+
+
     string = ser.readline()
-    print(string[0:-1])
+    return string[0:-1]
 
 def send_string(ser,string):
     ser.write(string.encode())
