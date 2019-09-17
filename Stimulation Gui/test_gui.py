@@ -8,10 +8,13 @@ import serial
 class myGui:
     def __init__(self, master,com):
         self.ser = serial.Serial(com,9600)        
+        
         self.root = master
+        self.root.title("Stimulation GUI")
         self.frame = tk.Frame(self.root)        
         self.com_response = tk.StringVar()
         self.com_response.set("No Response")
+        
         w = 5 # Width of entry boxes
         
         #Camera Frames Section
@@ -30,7 +33,7 @@ class myGui:
         self.stimset.trace_add("write", self.change_stim)
         self.stimframe = tk.Entry(self.root, text = self.stimset, width = w)   # build entry 'widget' with text = string variable
         self.stimf_text = tk.Label(self.root, text = "Stimulate on Frame:") # Create text that goes with entry widget
-
+        
         # Frequency Section
         self.frequency = tk.StringVar()
         self.frequency.set("1")
@@ -64,17 +67,16 @@ class myGui:
 
         # Additional Parameters and startup
         self.com_response.set(ac.handshake(self.ser))
-        self.ser.readline()
+        if self.ser.inWaiting() > 0:
+            self.ser.readline()
         self.com_label = tk.Label(self.root, textvariable = self.com_response)
         self.close = tk.Button(self.root, text = "QUIT", command = self.shut_down, bg = "red")
-        self.stim = tk.Button(self.root, text = "Stimulate!", command = self.stim)
+        self.stim = tk.Button(self.root, text = "Stimulate!", command = self.stimulate)
         self.reset = tk.Button(self.root, text = "Reset Frames", command = self.reset_frame)
         self.toggle_switch = tk.Button(self.root, text = "Switcher", command = self.switcher)
         self.frame.grid()
-
         #Start checking camera loop
         self.check_camera()
-
         # Stimulus Positioning
         stimrow = 0
         self.stimf_text.grid(row = stimrow,column = 0, sticky = 'E')
@@ -120,7 +122,7 @@ class myGui:
             self.camera.set(string[0:-1])
         self.root.after(5,self.check_camera)
 
-    def stim(self): 
+    def stimulate(self): 
         self.com_response.set(ac.send_command(self.ser,"S"))
     def switcher(self):
         self.com_response.set(ac.send_command(self.ser,"w"))
@@ -155,5 +157,5 @@ class myGui:
 
 
 root = tk.Tk()
-my = myGui(root,'COM4')
+my = myGui(root,'COM6')
 root.mainloop()
