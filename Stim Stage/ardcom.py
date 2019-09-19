@@ -17,6 +17,7 @@ def send_command(ser,cmd,var = None): # Switch Statement
         "n": set_stim_number,
         "P": set_pulse_width,
         "p": set_period,
+        'a': arm
     }
     func = switch.get(cmd,send_string)
     if(var != None): 
@@ -27,7 +28,8 @@ def send_command(ser,cmd,var = None): # Switch Statement
 
     string = ser.readline()
     return string[0:-1]
-
+def arm(ser):
+    ser.write(b'a')
 def send_string(ser,string):
     ser.write(string.encode())
 

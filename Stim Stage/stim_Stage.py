@@ -9,7 +9,7 @@ class myGui:
     def __init__(self, master, ser_stage, ser_arduino):
         self.root = master
         self.root.title("Stim-Stage Gui")
-        
+        self.armed = 0
         # Run stage and stimulation setups
         self.setup_stage(ser_stage)
 
@@ -155,6 +155,7 @@ class myGui:
         self.stim = tk.Button(self.arduino, text = "Stimulate!", command = self.stimulate)
         self.reset = tk.Button(self.arduino, text = "Reset Frames", command = self.reset_frame)
         self.toggle_switch = tk.Button(self.arduino, text = "Switcher", command = self.switcher)
+        self.arm_button = tk.Button(self.arduino, text = 'Arm', command = self.arm, bg = 'magenta')
         #Start checking camera loop
         self.check_camera()
         
@@ -184,6 +185,7 @@ class myGui:
         endrow = freqrow + 2
         self.stim.grid(row = endrow, column = 2, columnspan = 2)
         self.reset.grid(row = endrow, column = 0,columnspan = 2)
+        self.arm_button.grid(row = endrow +1, column = 2, columnspan = 2)
         self.toggle_switch.grid(row = endrow + 1, column = 0,columnspan = 2)
 
     def check_camera(self):
@@ -197,6 +199,14 @@ class myGui:
 
     def switcher(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"w"))
+
+    def arm(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"a"))
+        self.armed = (self.armed + 1) % 2
+        if self.armed is 1:
+            self.arm_button.configure(bg='green')
+        else:
+            self.arm_button.configure(bg='magenta')
 
     def reset_frame(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"r"))
