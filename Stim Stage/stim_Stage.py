@@ -6,10 +6,12 @@ import pyasi
 import csv
 
 class myGui:
-    def __init__(self, master, ser_stage, ser_arduino):
+    def __init__(self, master, ser_stage, ser_arduino, bugable):
         self.root = master
         self.root.title("Stim-Stage Gui")
         self.armed = 0
+        self.switch = 0
+        self.debug_state = bugable
         # Run stage and stimulation setups
         self.setup_stage(ser_stage)
 
@@ -29,12 +31,17 @@ class myGui:
         self.build_axes()
         self.build_focus()
         self.build_stage_marks()
+        if self.debug_state >= 1:
+            self.build_com_box()
+            self.build_storm_wave()
+            
         self.get_position()
         # Widget Positioning
         self.axes_frame.grid(row = 0, column = 0, padx = 2, pady = 2)
         self.focus_frame.grid(row = 0, column = 1, padx = 2, pady = 2)
         self.stage_mark_frame.grid(row = 1, column = 0, columnspan = 2, padx = 2, pady = 2)
-
+        self.com_frame.grid(row = 2, column = 0, columnspan = 2, padx = 2, pady = 2)
+        self.storm_wave_frame.grid(row = 3, column = 0)
     def build_axes(self):
         # Axes variables and current position widget
         self.axes_frame = tk.Frame(self.stage, bd = 2, relief = 'groove')
@@ -111,6 +118,46 @@ class myGui:
         self.up_mark.grid (row = 0, column = 0)
         self.load_last_marks.grid(row = 0, column = 2)
 
+    def build_com_box(self):
+        # Communication Box
+        self.com_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
+        self.com_frame_title = tk.Label(self.com_frame, text = 'Stage Communication')
+        self.cmd = tk.StringVar()
+        self.cmd.set('A')
+        self.command_line = tk.Entry(self.com_frame, textvariable = self.cmd)
+        self.response = tk.StringVar()
+        self.response.set('NA')
+        self.command_response = tk.Label(self.com_frame, textvariable = self.response)
+        self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_command)
+        self.com_frame_title.grid(row = 0, column = 0 , columnspan = 2)
+        self.command_line.grid(row = 1)
+        self.command_response.grid(row = 2)
+        self.cmd_button.grid(row = 1, column = 1)
+
+    def build_storm_wave(self):
+        self.storm_wave_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
+        self.wave_title = tk.Label(self.storm_wave_frame, text = 'Storm Wave')
+        self.wave_dz = tk.StringVar()
+        self.wave_range = tk.StringVar()
+        self.wave_dz.set('10')
+        self.wave_range.set('1')
+        self.wave_dz_title = tk.Label(self.storm_wave_frame, text = 'dz')
+        self.wave_dz_entry = tk.Entry(self.storm_wave_frame, textvariable = self.wave_dz, width = 5)
+        self.wave_range_title = tk.Label(self.storm_wave_frame, text = 'Range')
+        self.wave_range_entry = tk.Entry(self.storm_wave_frame, textvariable = self.wave_range, width = 5)
+        self.wave_dz_label = tk.Label(self.storm_wave_frame, text = 'nm')
+        self.wave_range_label = tk.Label(self.storm_wave_frame, text = 'um')
+        self.wave_button = tk.Button(self.storm_wave_frame, text = 'Turn Wave On', bg = 'magenta', command = self.wave)
+        self.wave_state = 0
+        self.wave_title.grid(row=0, column = 0)
+        self.wave_dz_title.grid(row=1, column = 0, sticky = 'E')
+        self.wave_dz_entry.grid(row=1, column = 1, sticky = 'W')
+        self.wave_dz_label.grid(row=1, column = 2)
+        self.wave_range_title.grid(row=2, column = 0, sticky = 'E')
+        self.wave_range_entry.grid(row=2, column = 1, sticky = 'W')
+        self.wave_range_label.grid(row=2, column = 2)
+        self.wave_button.grid(row = 3, column = 1)
+        
     def setup_arduino(self, ser):
         self.ser_arduino = serial.Serial(ser, 9600)
         self.arduino = tk.Frame(self.root, bd =2, relief = 'groove')
@@ -154,7 +201,7 @@ class myGui:
         self.com_label = tk.Label(self.arduino, textvariable = self.com_response)
         self.stim = tk.Button(self.arduino, text = "Stimulate!", command = self.stimulate)
         self.reset = tk.Button(self.arduino, text = "Reset Frames", command = self.reset_frame)
-        self.toggle_switch = tk.Button(self.arduino, text = "Switcher", command = self.switcher)
+        self.toggle_switch = tk.Button(self.arduino, text = "Switcher", command = self.switcher, bg ='magenta')
         self.arm_button = tk.Button(self.arduino, text = 'Arm', command = self.arm, bg = 'magenta')
         #Start checking camera loop
         self.check_camera()
@@ -199,6 +246,11 @@ class myGui:
 
     def switcher(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"w"))
+        self.switch = (self.switch + 1) % 2
+        if self.switch is 1:
+            self.toggle_switch.configure(bg='green')
+        else:
+            self.toggle_switch.configure(bg='magenta')
 
     def arm(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"a"))
@@ -213,11 +265,27 @@ class myGui:
         self.camera.set("0")
 
     # Text change Callback functions
+    def wave(self):
+        dz = float(self.wave_dz.get())
+        um = float(self.wave_range.get())*1000
+        steps = int(um/dz)
+        self.wave_state = (self.wave_state + 1) % 2
+        if self.wave_state is 1:
+            pyasi.send_command(self.ser_s,'ZS X=' + str(dz/100) + ' Y=' + str(steps) + '\r')
+            pyasi.send_command(self.ser_s,'TTL X=4\r')
+            self.wave_button.configure(text = 'Turn Wave Off', bg = 'green')
+        else:
+            pyasi.send_command(self.ser_s,'TTL X=0\r')
+            self.wave_button.configure(text = 'Turn Wave On', bg = 'magenta')
+
     def change_stim(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"s",self.stimset.get()))
 
     def change_stim_number(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"n",self.stimN.get()))
+    
+    def send_command(self):
+        self.response.set(pyasi.send_command(self.ser,self.cmd.get() + '\r'))
 
     def change_frequency(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"f",self.frequency.get()))
@@ -281,5 +349,5 @@ class myGui:
         f.close()
 
 root = tk.Tk()
-my = myGui(root,'COM2', 'COM6')
+my = myGui(root,'COM2', 'COM6', 1)
 root.mainloop()
