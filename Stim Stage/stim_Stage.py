@@ -40,8 +40,9 @@ class myGui:
         self.axes_frame.grid(row = 0, column = 0, padx = 2, pady = 2)
         self.focus_frame.grid(row = 0, column = 1, padx = 2, pady = 2)
         self.stage_mark_frame.grid(row = 1, column = 0, columnspan = 2, padx = 2, pady = 2)
-        self.com_frame.grid(row = 2, column = 0, columnspan = 2, padx = 2, pady = 2)
-        self.storm_wave_frame.grid(row = 3, column = 0)
+        if self.debug_state >= 1:
+            self.com_frame.grid(row = 2, column = 0, columnspan = 2, padx = 2, pady = 2)
+            self.storm_wave_frame.grid(row = 3, column = 0)
     def build_axes(self):
         # Axes variables and current position widget
         self.axes_frame = tk.Frame(self.stage, bd = 2, relief = 'groove')
@@ -349,5 +350,5 @@ class myGui:
         f.close()
 
 root = tk.Tk()
-my = myGui(root,'COM2', 'COM6', 1)
+my = myGui(root,'COM3', 'COM10', 0)
 root.mainloop()
