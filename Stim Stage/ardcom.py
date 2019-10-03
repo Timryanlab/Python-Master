@@ -17,7 +17,8 @@ def send_command(ser,cmd,var = None): # Switch Statement
         "n": set_stim_number,
         "P": set_pulse_width,
         "p": set_period,
-        'a': arm
+        'a': arm,
+        '4': uv_laser
     }
     func = switch.get(cmd,send_string)
     if(var != None): 
@@ -30,8 +31,12 @@ def send_command(ser,cmd,var = None): # Switch Statement
     return string[0:-1]
 def arm(ser):
     ser.write(b'a')
+    
 def send_string(ser,string):
     ser.write(string.encode())
+
+def uv_laser(ser):
+    ser.write(b'4')
 
 def reset_count(ser):
     ser.write(b"r")
