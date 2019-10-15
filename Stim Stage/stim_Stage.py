@@ -1,4 +1,5 @@
 # This gui is to unify the stage controls with the arduino stimulation controls
+# Stim_Stage 1.1
 import tkinter as tk
 import ardcom as ac
 import serial
@@ -134,7 +135,7 @@ class myGui:
         self.response = tk.StringVar()
         self.response.set('NA')
         self.command_response = tk.Label(self.com_frame, textvariable = self.response)
-        self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_command)
+        self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_asi_command)
         self.com_frame_title.grid(row = 0, column = 0 , columnspan = 2)
         self.command_line.grid(row = 1)
         self.command_response.grid(row = 2)
@@ -147,6 +148,7 @@ class myGui:
         self.wave_range = tk.StringVar()
         self.wave_dz.set('10')
         self.wave_range.set('1')
+        self.uv_state = 0
         self.wave_dz_title = tk.Label(self.storm_wave_frame, text = 'dz')
         self.wave_dz_entry = tk.Entry(self.storm_wave_frame, textvariable = self.wave_dz, width = 5)
         self.wave_range_title = tk.Label(self.storm_wave_frame, text = 'Range')
@@ -156,6 +158,7 @@ class myGui:
         self.wave_button = tk.Button(self.storm_wave_frame, text = 'Turn Wave On', bg = 'magenta', command = self.wave)
         self.wave_state = 0
         self.wave_title.grid(row=0, column = 0)
+        self.uv_laser_button = tk.Button(self.storm_wave_frame, text = "Turn 405 On", bg = 'magenta', command = self.uv_laser)
         self.wave_dz_title.grid(row=1, column = 0, sticky = 'E')
         self.wave_dz_entry.grid(row=1, column = 1, sticky = 'W')
         self.wave_dz_label.grid(row=1, column = 2)
@@ -163,6 +166,7 @@ class myGui:
         self.wave_range_entry.grid(row=2, column = 1, sticky = 'W')
         self.wave_range_label.grid(row=2, column = 2)
         self.wave_button.grid(row = 3, column = 1)
+        self.uv_laser_button.grid(row=3, column = 0)
         
     def setup_arduino(self, ser):
         self.ser_arduino = serial.Serial(ser, 9600)
@@ -284,15 +288,22 @@ class myGui:
             pyasi.send_command(self.ser_s,'TTL X=0\r')
             self.wave_button.configure(text = 'Turn Wave On', bg = 'magenta')
 
+    def uv_laser(self):
+        ac.send_command(self.ser_arduino, '4')
+        self.uv_state = (self.uv_state + 1) % 2
+        if self.uv_state is 1:
+            self.uv_laser_button.config(text = 'Turn 405 Off', bg = 'green')
+        else:
+            self.uv_laser_button.config(text = 'Turn 405 On', bg = 'magenta')
+
     def change_stim(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"s",self.stimset.get()))
 
     def change_stim_number(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"n",self.stimN.get()))
     
-    def send_command(self):
-        self.response.set(pyasi.send_command(self.ser,self.cmd.get() + '\r'))
-
+    def send_asi_command(self):
+        self.response.set(pyasi.send_command(self.ser_s,self.cmd.get() + '\r'))
     def change_frequency(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"f",self.frequency.get()))
 
@@ -355,5 +366,5 @@ class myGui:
         f.close()
 
 root = tk.Tk()
-my = myGui(root,'COM3', 'COM10', 0)
+my = myGui(root,'COM1', 'COM2', 0)
 root.mainloop()
