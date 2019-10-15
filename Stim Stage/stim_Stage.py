@@ -26,23 +26,28 @@ class myGui:
         # Setup widgets and positions related to the 'stage' portion of the gui
         self.ser_s = serial.Serial(ser, 9600)
         self.ser_s.write(b'vb z=3\r')
-        self.ser_s.readline()
+        #self.ser_s.readline()
         self.stage = tk.Frame(self.root, bd = 2, relief = 'sunken') # Define frame for
         self.build_axes()
         self.build_focus()
-        self.build_stage_marks()
-        if self.debug_state >= 1:
-            self.build_com_box()
-            self.build_storm_wave()
-            
+        self.build_stage_marks()            
         self.get_position()
         # Widget Positioning
         self.axes_frame.grid(row = 0, column = 0, padx = 2, pady = 2)
         self.focus_frame.grid(row = 0, column = 1, padx = 2, pady = 2)
         self.stage_mark_frame.grid(row = 1, column = 0, columnspan = 2, padx = 2, pady = 2)
-        if self.debug_state >= 1:
+        if self.debug_state == 1: # Andrew's Scope's configuration
+            self.build_com_box()
+            self.build_storm_wave()
             self.com_frame.grid(row = 2, column = 0, columnspan = 2, padx = 2, pady = 2)
             self.storm_wave_frame.grid(row = 3, column = 0)
+        if self.debug_state == 2: # SYN-ATP scope Config
+            print('NO')
+        if self.debug_state == 3: # The Bear scope Config
+            print('NO')
+        if self.debug_state == 4: # Michelle scope Config
+            print('NO')
+
     def build_axes(self):
         # Axes variables and current position widget
         self.axes_frame = tk.Frame(self.stage, bd = 2, relief = 'groove')
