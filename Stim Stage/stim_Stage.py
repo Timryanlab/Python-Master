@@ -350,5 +350,5 @@ class myGui:
         f.close()
 
 root = tk.Tk()
-my = myGui(root,'COM3', 'COM10', 0)
+my = myGui(root,'COM3', 'COM9', 0)
 root.mainloop()
