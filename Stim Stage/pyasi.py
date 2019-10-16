@@ -1,10 +1,14 @@
 import serial
 
 def get_positions(ser):
+    ser.reset_input_buffer()
     ser.write(b'W X\r')
     string = ser.readline()
-    x = float(string[3:-3])
-
+    try:
+        x = float(string[3:-3])
+    except:
+        x = 'Error'
+    
     ser.write(b'W Y\r')
     string = ser.readline()
     y = float(string[3:-3])

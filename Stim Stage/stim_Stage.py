@@ -22,10 +22,31 @@ class myGui:
         self.arduino.grid(row = 1, column = 0)
         self.stage.grid(row = 1, column = 1)
         self.close.grid(row = 0)
+        if self.debug_state == 1: # Andrew's Scope's configuration
+            self.build_com_box()
+            self.build_storm_wave()
+            self.com_frame.grid(row = 2, column = 1, columnspan = 2, padx = 2, pady = 2)
+            self.storm_wave_frame.grid(row = 2, column = 0)
+        if self.debug_state == 2: # SYN-ATP scope Config
+            print('NO')
+        if self.debug_state == 3: # The Bear scope Config
+            self.build_dual_camera()
+            self.dual_camera_frame.grid(row = 2, column = 0)
+        if self.debug_state == 4: # Michelle scope Config
+            print('NO')
 
     def setup_stage(self, ser):
         # Setup widgets and positions related to the 'stage' portion of the gui
-        self.ser_s = serial.Serial(ser, 9600)
+        flag = 1
+        print('Opening Stage communication... ', end ='')
+        
+        while flag is 1:
+            try:
+                self.ser_s = serial.Serial(ser, 9600)
+                flag = 0
+            except:
+                count = 1
+        print('complete\n')
         self.ser_s.write(b'vb z=3\r')
         #self.ser_s.readline()
         self.stage = tk.Frame(self.root, bd = 2, relief = 'sunken') # Define frame for
@@ -37,17 +58,55 @@ class myGui:
         self.axes_frame.grid(row = 0, column = 0, padx = 2, pady = 2)
         self.focus_frame.grid(row = 0, column = 1, padx = 2, pady = 2)
         self.stage_mark_frame.grid(row = 1, column = 0, columnspan = 2, padx = 2, pady = 2)
-        if self.debug_state == 1: # Andrew's Scope's configuration
-            self.build_com_box()
-            self.build_storm_wave()
-            self.com_frame.grid(row = 2, column = 0, columnspan = 2, padx = 2, pady = 2)
-            self.storm_wave_frame.grid(row = 3, column = 0)
-        if self.debug_state == 2: # SYN-ATP scope Config
-            print('NO')
-        if self.debug_state == 3: # The Bear scope Config
-            print('NO')
-        if self.debug_state == 4: # Michelle scope Config
-            print('NO')
+    
+    def build_dual_camera(self):
+        self.dual_camera_frame =tk.Frame(self.root, bd =2 , relief = 'sunken')
+        self.external_trigger_button = tk.Button(self.dual_camera_frame, text = 'Ext. Trigger', bg = 'magenta', command = self.external_trigger)
+        self.inverter_button = tk.Button(self.dual_camera_frame, text = 'Inverter', bg = 'magenta', command = self.invert)
+        self.simultaneous_button = tk.Button(self.dual_camera_frame, text = 'Simultaneous', bg = 'magenta', command = self.simultaneous)
+        self.simul_tog = 0
+        self.inver_tog = 0
+        self.exttr_tog = 0
+        self.camera_period_label = tk.Label(self.dual_camera_frame, text = 'Camera period')
+        self.camera_period_units = tk.Label(self.dual_camera_frame, text = 'ms')
+        self.camera_period = tk.StringVar()
+        self.camera_period.set('100')
+        self.camera_period.trace_add("write", self.change_period)
+        self.camera_period_entry = tk.Entry(self.dual_camera_frame, textvariable = self.camera_period)
+        #Organization
+        self.external_trigger_button.grid(row = 1, column = 0, columnspan = 3, padx = 2, pady = 2)
+        self.inverter_button.grid(row = 1, column = 3, columnspan = 3, padx = 2, pady = 2)
+        self.simultaneous_button.grid(row = 2, column = 0, columnspan = 3, padx = 2, pady = 2)
+        self.camera_period_label.grid(row = 2, column = 3, columnspan = 1, padx = 2, pady = 2)
+        self.camera_period_entry.grid(row = 2, column = 4, columnspan = 1, padx = 2, pady = 2)
+        self.camera_period_units.grid(row = 2, column = 5, columnspan = 1, padx = 2, pady = 2)
+
+    def external_trigger(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"e"))
+        self.exttr_tog = (self.exttr_tog + 1)%2
+        if self.exttr_tog is 1: 
+            self.external_trigger_button.configure(bg = 'green')
+        else:
+            self.external_trigger_button.configure(bg = 'magenta')
+    
+    def invert(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"i"))
+        self.inver_tog = (self.inver_tog + 1)%2
+        if self.inver_tog is 1: 
+            self.inverter_button.configure(bg = 'green')
+        else:
+            self.inverter_button.configure(bg = 'magenta')
+
+    def simultaneous(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"k"))
+        self.simul_tog = (self.simul_tog + 1)%2
+        if self.simul_tog is 1: 
+            self.simultaneous_button.configure(bg = 'green')
+        else:
+            self.simultaneous_button.configure(bg = 'magenta')
+
+    def change_period(self, *args):
+        self.com_response.set(ac.send_command(self.ser_arduino,"c",self.camera_period.get()))
 
     def build_axes(self):
         # Axes variables and current position widget
@@ -169,7 +228,15 @@ class myGui:
         self.uv_laser_button.grid(row=3, column = 0)
         
     def setup_arduino(self, ser):
-        self.ser_arduino = serial.Serial(ser, 9600)
+        flag = 1
+        print('Connecting to Arduino... ', end='')
+        while flag is 1:
+            try:
+                self.ser_arduino = serial.Serial(ser, 9600)
+                flag = 0
+            except:
+                count = 1
+        print('Complete\n')
         self.arduino = tk.Frame(self.root, bd =2, relief = 'groove')
         self.camera_frame_setup()
 
@@ -193,13 +260,13 @@ class myGui:
         self.stimf_text = tk.Label(self.arduino, text = "Stimulate on Frame:") # Create text that goes with entry widget
         # Number of Stimuli / Train section
         self.stimN = tk.StringVar()
-        self.stimN.set("1")
+        self.stimN.set("20")
         self.stimN.trace_add("write" , self.change_stim_number)
         self.stimN_frame = tk.Entry(self.arduino, textvariable = self.stimN, width = w)   
         self.stimN_text = tk.Label(self.arduino, text = "Number of Stimuli/Train:")
         # Frequency Section
         self.frequency = tk.StringVar()
-        self.frequency.set("1")
+        self.frequency.set("20")
         self.frequency.trace_add("write", self.change_frequency)
         self.frequency_frame = tk.Entry(self.arduino, textvariable = self.frequency, width = w)  
         self.frequency_text = tk.Label(self.arduino, text = "Frequency of train:")
@@ -304,6 +371,7 @@ class myGui:
     
     def send_asi_command(self):
         self.response.set(pyasi.send_command(self.ser_s,self.cmd.get() + '\r'))
+
     def change_frequency(self, *args):
         self.com_response.set(ac.send_command(self.ser_arduino,"f",self.frequency.get()))
 
@@ -366,5 +434,5 @@ class myGui:
         f.close()
 
 root = tk.Tk()
-my = myGui(root,'COM1', 'COM2', 0)
+my = myGui(root,'COM3', 'COM9', 3)
 root.mainloop()
