@@ -14,13 +14,24 @@ class myGui:
         self.debug_state = bugable
         # Run stage and stimulation setups
         self.setup_stage(ser_stage)
-
         self.setup_arduino(ser_arduino)
+
         #Definie a quit button
         self.close = tk.Button(self.root, text = "QUIT", command = self.shut_down, bg = "red")
         self.arduino.grid(row = 1, column = 0)
         self.stage.grid(row = 1, column = 1)
         self.close.grid(row = 0)
+        if self.debug_state is 2:
+            self.laser_setup()
+            self.laser_frame.grid(row = 2, column = 0)
+        
+    def laser_setup(self):
+        self.laser_frame = tk.Frame(self.root, bd= 2, relief = 'sunken')
+        self.laser_561_button = tk.Button(self.laser_frame, text = "Proof", command = self.toggle_561)
+        self.laser_561_button.grid(row = 0, column = 0)
+
+    def toggle_561(self):
+        return None
 
     def setup_stage(self, ser):
         # Setup widgets and positions related to the 'stage' portion of the gui
