@@ -18,6 +18,11 @@ def send_command(ser,cmd,var = None): # Switch Statement
         "P": set_pulse_width,
         "p": set_period,
         'a': arm,
+        'e': ext_trig,
+        'k': simultaneous,
+        'i': invert,
+        '4': uv_laser,
+        'c': camera_period,
         '4': uv_laser
     }
     func = switch.get(cmd,send_string)
@@ -26,17 +31,31 @@ def send_command(ser,cmd,var = None): # Switch Statement
     else:
         func(ser)
 
-
     string = ser.readline()
     return string[0:-1]
+    
 def arm(ser):
     ser.write(b'a')
-    
-def send_string(ser,string):
-    ser.write(string.encode())
 
 def uv_laser(ser):
     ser.write(b'4')
+    
+def ext_trig(ser):
+    ser.write(b'e')
+
+def simultaneous(ser):
+    ser.write(b'k')
+
+def invert(ser):
+    ser.write(b'i')
+
+def camera_period(ser,period):
+    string = "c" + str(period)
+    send_string(ser,string)
+
+
+def send_string(ser,string):
+    ser.write(string.encode())
 
 def reset_count(ser):
     ser.write(b"r")
