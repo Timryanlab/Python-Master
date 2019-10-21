@@ -158,6 +158,22 @@ class myGui:
         self.up_mark.grid (row = 0, column = 0)
         self.load_last_marks.grid(row = 0, column = 2)
 
+    def build_com_box(self):
+        # Communication Box
+        self.com_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
+        self.com_frame_title = tk.Label(self.com_frame, text = 'Stage Communication')
+        self.cmd = tk.StringVar()
+        self.cmd.set('A')
+        self.command_line = tk.Entry(self.com_frame, textvariable = self.cmd)
+        self.response = tk.StringVar()
+        self.response.set('NA')
+        self.command_response = tk.Label(self.com_frame, textvariable = self.response)
+        self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_asi_command)
+        self.com_frame_title.grid(row = 0, column = 0 , columnspan = 2)
+        self.command_line.grid(row = 1)
+        self.command_response.grid(row = 2)
+        self.cmd_button.grid(row = 1, column = 1)
+
     def build_storm_wave(self):
         self.storm_wave_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
         self.wave_title = tk.Label(self.storm_wave_frame, text = 'Storm Wave')

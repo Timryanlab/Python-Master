@@ -22,7 +22,8 @@ def send_command(ser,cmd,var = None): # Switch Statement
         'k': simultaneous,
         'i': invert,
         '4': uv_laser,
-        'c': camera_period
+        'c': camera_period,
+        '4': uv_laser
     }
     func = switch.get(cmd,send_string)
     if(var != None): 
@@ -32,6 +33,7 @@ def send_command(ser,cmd,var = None): # Switch Statement
 
     string = ser.readline()
     return string[0:-1]
+    
 def arm(ser):
     ser.write(b'a')
 
@@ -50,6 +52,7 @@ def invert(ser):
 def camera_period(ser,period):
     string = "c" + str(period)
     send_string(ser,string)
+
 
 def send_string(ser,string):
     ser.write(string.encode())
