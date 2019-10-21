@@ -22,32 +22,27 @@ class myGui:
         self.arduino.grid(row = 1, column = 0)
         self.stage.grid(row = 1, column = 1)
         self.close.grid(row = 0)
-
-    def setup_stage(self, ser):
-        # Setup widgets and positions related to the 'stage' portion of the gui
-        self.ser_s = serial.Serial(ser, 9600)
-        self.ser_s.write(b'vb z=3\r')
-        #self.ser_s.readline()
-        self.stage = tk.Frame(self.root, bd = 2, relief = 'sunken') # Define frame for
-        self.build_axes()
-        self.build_focus()
-        self.build_stage_marks()            
-        self.get_position()
-        # Widget Positioning
-        self.axes_frame.grid(row = 0, column = 0, padx = 2, pady = 2)
-        self.focus_frame.grid(row = 0, column = 1, padx = 2, pady = 2)
-        self.stage_mark_frame.grid(row = 1, column = 0, columnspan = 2, padx = 2, pady = 2)
         if self.debug_state == 1: # Andrew's Scope's configuration
             self.build_com_box()
             self.build_storm_wave()
-            self.com_frame.grid(row = 2, column = 0, columnspan = 2, padx = 2, pady = 2)
-            self.storm_wave_frame.grid(row = 3, column = 0)
+            self.com_frame.grid(row = 2, column = 1, columnspan = 2, padx = 2, pady = 2)
+            self.storm_wave_frame.grid(row = 2, column = 0)
         if self.debug_state == 2: # SYN-ATP scope Config
             print('NO')
         if self.debug_state == 3: # The Bear scope Config
-            print('NO')
+            self.build_dual_camera()
+            self.dual_camera_frame.grid(row = 2, column = 0)
         if self.debug_state == 4: # Michelle scope Config
             print('NO')
+
+    # Functions are listed alphabetically for ease of searching
+    def arm(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"a"))
+        self.armed = (self.armed + 1) % 2
+        if self.armed is 1:
+            self.arm_button.configure(bg='green')
+        else:
+            self.arm_button.configure(bg='magenta')
 
     def build_axes(self):
         # Axes variables and current position widget
@@ -78,6 +73,44 @@ class myGui:
         self.current_x.grid(row = pos_row, column = pos_col + 1, sticky = 'W')
         self.current_y.grid(row = pos_row + 1, column = pos_col + 1, sticky = 'W')
         self.current_z.grid(row = pos_row + 2, column = pos_col + 1, sticky = 'W')
+
+    def build_com_box(self):
+        # Communication Box
+        self.com_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
+        self.com_frame_title = tk.Label(self.com_frame, text = 'Stage Communication')
+        self.cmd = tk.StringVar()
+        self.cmd.set('A')
+        self.command_line = tk.Entry(self.com_frame, textvariable = self.cmd)
+        self.response = tk.StringVar()
+        self.response.set('NA')
+        self.command_response = tk.Label(self.com_frame, textvariable = self.response)
+        self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_asi_command)
+        self.com_frame_title.grid(row = 0, column = 0 , columnspan = 2)
+        self.command_line.grid(row = 1)
+        self.command_response.grid(row = 2)
+        self.cmd_button.grid(row = 1, column = 1)
+     
+    def build_dual_camera(self):
+        self.dual_camera_frame =tk.Frame(self.root, bd =2 , relief = 'sunken')
+        self.external_trigger_button = tk.Button(self.dual_camera_frame, text = 'Ext. Trigger', bg = 'magenta', command = self.external_trigger)
+        self.inverter_button = tk.Button(self.dual_camera_frame, text = 'Inverter', bg = 'magenta', command = self.invert)
+        self.simultaneous_button = tk.Button(self.dual_camera_frame, text = 'Simultaneous', bg = 'magenta', command = self.simultaneous)
+        self.simul_tog = 0
+        self.inver_tog = 0
+        self.exttr_tog = 0
+        self.camera_period_label = tk.Label(self.dual_camera_frame, text = 'Camera period')
+        self.camera_period_units = tk.Label(self.dual_camera_frame, text = 'ms')
+        self.camera_period = tk.StringVar()
+        self.camera_period.set('100')
+        self.camera_period.trace_add("write", self.change_period)
+        self.camera_period_entry = tk.Entry(self.dual_camera_frame, textvariable = self.camera_period)
+        #Organization
+        self.external_trigger_button.grid(row = 1, column = 0, columnspan = 3, padx = 2, pady = 2)
+        self.inverter_button.grid(row = 1, column = 3, columnspan = 3, padx = 2, pady = 2)
+        self.simultaneous_button.grid(row = 2, column = 0, columnspan = 3, padx = 2, pady = 2)
+        self.camera_period_label.grid(row = 2, column = 3, columnspan = 1, padx = 2, pady = 2)
+        self.camera_period_entry.grid(row = 2, column = 4, columnspan = 1, padx = 2, pady = 2)
+        self.camera_period_units.grid(row = 2, column = 5, columnspan = 1, padx = 2, pady = 2)
 
     def build_focus(self):
         # Focus Adjustment widget
@@ -167,12 +200,7 @@ class myGui:
         self.wave_range_label.grid(row=2, column = 2)
         self.wave_button.grid(row = 3, column = 1)
         self.uv_laser_button.grid(row=3, column = 0)
-        
-    def setup_arduino(self, ser):
-        self.ser_arduino = serial.Serial(ser, 9600)
-        self.arduino = tk.Frame(self.root, bd =2, relief = 'groove')
-        self.camera_frame_setup()
-
+ 
     def camera_frame_setup(self):
         w = 5
         # Define Com Response
@@ -193,13 +221,13 @@ class myGui:
         self.stimf_text = tk.Label(self.arduino, text = "Stimulate on Frame:") # Create text that goes with entry widget
         # Number of Stimuli / Train section
         self.stimN = tk.StringVar()
-        self.stimN.set("1")
+        self.stimN.set("20")
         self.stimN.trace_add("write" , self.change_stim_number)
         self.stimN_frame = tk.Entry(self.arduino, textvariable = self.stimN, width = w)   
         self.stimN_text = tk.Label(self.arduino, text = "Number of Stimuli/Train:")
         # Frequency Section
         self.frequency = tk.StringVar()
-        self.frequency.set("1")
+        self.frequency.set("20")
         self.frequency.trace_add("write", self.change_frequency)
         self.frequency_frame = tk.Entry(self.arduino, textvariable = self.frequency, width = w)  
         self.frequency_text = tk.Label(self.arduino, text = "Frequency of train:")
@@ -244,12 +272,137 @@ class myGui:
         self.reset.grid(row = endrow, column = 0,columnspan = 2)
         self.arm_button.grid(row = endrow +1, column = 2, columnspan = 2)
         self.toggle_switch.grid(row = endrow + 1, column = 0,columnspan = 2)
+   
+    def change_frequency(self, *args):
+        self.com_response.set(ac.send_command(self.ser_arduino,"f",self.frequency.get()))
+
+    def change_period(self, *args):
+        self.com_response.set(ac.send_command(self.ser_arduino,"c",self.camera_period.get()))
+    
+    def change_stim(self, *args):
+        self.com_response.set(ac.send_command(self.ser_arduino,"s",self.stimset.get()))
+
+    def change_stim_number(self, *args):
+        self.com_response.set(ac.send_command(self.ser_arduino,"n",self.stimN.get()))
 
     def check_camera(self):
         if(self.ser_arduino.in_waiting > 0):
             string = self.ser_arduino.readline()
             self.camera.set(string[0:-1])
         self.arduino.after(5,self.check_camera)
+
+    def clear_mark(self):
+        ind = int(self.last_pos.get())
+        del self.marks[ind]
+        if ind is self.mark_num: self.last_pos.set(int(self.last_pos.get()) - 1)
+        self.mark_num = self.mark_num - 1
+        self.mark_text.set('Out of {} marks'.format(self.mark_num))
+        self.write_marks()
+
+    def dwn_focus(self):
+        pyasi.send_command(self.ser_s,'r z=-{}\r'.format(self.focus_amount.get()))
+
+    def external_trigger(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"e"))
+        self.exttr_tog = (self.exttr_tog + 1)%2
+        if self.exttr_tog is 1: 
+            self.external_trigger_button.configure(bg = 'green')
+        else:
+            self.external_trigger_button.configure(bg = 'magenta')
+    
+    def invert(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"i"))
+        self.inver_tog = (self.inver_tog + 1)%2
+        if self.inver_tog is 1: 
+            self.inverter_button.configure(bg = 'green')
+        else:
+            self.inverter_button.configure(bg = 'magenta')
+ 
+    def get_position(self):
+        [x,y,z] = pyasi.get_positions(self.ser_s)
+        self.x.set(x)
+        self.y.set(y)
+        self.z.set(z)
+        self.stage.after(20, self.get_position)
+
+    def go_to_mark(self):
+        ind = int(self.last_pos.get())
+        string = 'M X = {} Y = {} Z = {}\r'.format(self.marks[ind][0],self.marks[ind][1],self.marks[ind][2])
+        pyasi.send_command(self.ser_s, string)
+
+    def load_marks(self):
+        f = open('positions.csv', 'r')
+        reader = csv.reader(f)
+        self.marks = list(reader)
+        f.close()
+        print(self.marks)
+        self.mark_num = len(self.marks)
+        self.mark_text.set('Out of {} marks'.format(self.mark_num))
+
+    def new_mark_position(self):
+        self.marks.append([self.x.get(),self.y.get(),self.z.get()])
+        self.mark_num = self.mark_num + 1
+        self.last_pos.set(self.mark_num)
+        self.mark_text.set('Out of {} marks'.format(self.mark_num))
+        self.write_marks()
+
+    def reset_frame(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"r"))
+        self.camera.set("0")
+
+    def send_asi_command(self):
+        self.response.set(pyasi.send_command(self.ser_s,self.cmd.get() + '\r'))
+      
+    def setup_arduino(self, ser):
+        flag = 1
+        print('Connecting to Arduino... ', end='')
+        while flag is 1:
+            try:
+                self.ser_arduino = serial.Serial(ser, 9600)
+                flag = 0
+            except:
+                count = 1
+        print('Complete\n')
+        self.arduino = tk.Frame(self.root, bd =2, relief = 'groove')
+        self.camera_frame_setup()
+ 
+    def setup_stage(self, ser):
+        # Setup widgets and positions related to the 'stage' portion of the gui
+        flag = 1
+        print('Opening Stage communication... ', end ='')
+        
+        while flag is 1:
+            try:
+                self.ser_s = serial.Serial(ser, 9600)
+                flag = 0
+            except:
+                count = 1
+        print('complete\n')
+        self.ser_s.write(b'vb z=3\r')
+        #self.ser_s.readline()
+        self.stage = tk.Frame(self.root, bd = 2, relief = 'sunken') # Define frame for
+        self.build_axes()
+        self.build_focus()
+        self.build_stage_marks()            
+        self.get_position()
+        # Widget Positioning
+        self.axes_frame.grid(row = 0, column = 0, padx = 2, pady = 2)
+        self.focus_frame.grid(row = 0, column = 1, padx = 2, pady = 2)
+        self.stage_mark_frame.grid(row = 1, column = 0, columnspan = 2, padx = 2, pady = 2)
+ 
+    def shut_down(self):
+        # Close serial connections and destroy GUI
+        self.ser_arduino.close()
+        self.ser_s.close()
+        self.root.destroy()
+
+    def simultaneous(self):
+        self.com_response.set(ac.send_command(self.ser_arduino,"k"))
+        self.simul_tog = (self.simul_tog + 1)%2
+        if self.simul_tog is 1: 
+            self.simultaneous_button.configure(bg = 'green')
+        else:
+            self.simultaneous_button.configure(bg = 'magenta')
 
     def stimulate(self): 
         self.com_response.set(ac.send_command(self.ser_arduino,"S"))
@@ -262,19 +415,21 @@ class myGui:
         else:
             self.toggle_switch.configure(bg='magenta')
 
-    def arm(self):
-        self.com_response.set(ac.send_command(self.ser_arduino,"a"))
-        self.armed = (self.armed + 1) % 2
-        if self.armed is 1:
-            self.arm_button.configure(bg='green')
+    def update_mark(self):
+        ind = int(self.last_pos.get())
+        self.marks[ind] = [self.x.get(),self.y.get(),self.z.get()]
+
+    def up_focus(self):
+        pyasi.send_command(self.ser_s,'r z={}\r'.format(self.focus_amount.get()))
+
+    def uv_laser(self):
+        ac.send_command(self.ser_arduino, '4')
+        self.uv_state = (self.uv_state + 1) % 2
+        if self.uv_state is 1:
+            self.uv_laser_button.config(text = 'Turn 405 Off', bg = 'green')
         else:
-            self.arm_button.configure(bg='magenta')
+            self.uv_laser_button.config(text = 'Turn 405 On', bg = 'magenta')
 
-    def reset_frame(self):
-        self.com_response.set(ac.send_command(self.ser_arduino,"r"))
-        self.camera.set("0")
-
-    # Text change Callback functions
     def wave(self):
         dz = float(self.wave_dz.get())
         um = float(self.wave_range.get())*1000
@@ -287,78 +442,7 @@ class myGui:
         else:
             pyasi.send_command(self.ser_s,'TTL X=0\r')
             self.wave_button.configure(text = 'Turn Wave On', bg = 'magenta')
-
-    def uv_laser(self):
-        ac.send_command(self.ser_arduino, '4')
-        self.uv_state = (self.uv_state + 1) % 2
-        if self.uv_state is 1:
-            self.uv_laser_button.config(text = 'Turn 405 Off', bg = 'green')
-        else:
-            self.uv_laser_button.config(text = 'Turn 405 On', bg = 'magenta')
-
-    def change_stim(self, *args):
-        self.com_response.set(ac.send_command(self.ser_arduino,"s",self.stimset.get()))
-
-    def change_stim_number(self, *args):
-        self.com_response.set(ac.send_command(self.ser_arduino,"n",self.stimN.get()))
-    
-    def send_asi_command(self):
-        self.response.set(pyasi.send_command(self.ser_s,self.cmd.get() + '\r'))
-    def change_frequency(self, *args):
-        self.com_response.set(ac.send_command(self.ser_arduino,"f",self.frequency.get()))
-
-    def shut_down(self):
-        # Close serial connections and destroy GUI
-        self.ser_arduino.close()
-        self.ser_s.close()
-        self.root.destroy()
-
-    def load_marks(self):
-        f = open('positions.csv', 'r')
-        reader = csv.reader(f)
-        self.marks = list(reader)
-        f.close()
-        print(self.marks)
-        self.mark_num = len(self.marks)
-        self.mark_text.set('Out of {} marks'.format(self.mark_num))
-
-    def up_focus(self):
-        pyasi.send_command(self.ser_s,'r z={}\r'.format(self.focus_amount.get()))
-
-    def dwn_focus(self):
-        pyasi.send_command(self.ser_s,'r z=-{}\r'.format(self.focus_amount.get()))
-
-    def go_to_mark(self):
-        ind = int(self.last_pos.get())
-        string = 'M X = {} Y = {} Z = {}\r'.format(self.marks[ind][0],self.marks[ind][1],self.marks[ind][2])
-        pyasi.send_command(self.ser_s, string)
-
-    def clear_mark(self):
-        ind = int(self.last_pos.get())
-        del self.marks[ind]
-        if ind is self.mark_num: self.last_pos.set(int(self.last_pos.get()) - 1)
-        self.mark_num = self.mark_num - 1
-        self.mark_text.set('Out of {} marks'.format(self.mark_num))
-        self.write_marks()
-
-    def get_position(self):
-        [x,y,z] = pyasi.get_positions(self.ser_s)
-        self.x.set(x)
-        self.y.set(y)
-        self.z.set(z)
-        self.stage.after(20, self.get_position)
-
-    def new_mark_position(self):
-        self.marks.append([self.x.get(),self.y.get(),self.z.get()])
-        self.mark_num = self.mark_num + 1
-        self.last_pos.set(self.mark_num)
-        self.mark_text.set('Out of {} marks'.format(self.mark_num))
-        self.write_marks()
-
-    def update_mark(self):
-        ind = int(self.last_pos.get())
-        self.marks[ind] = [self.x.get(),self.y.get(),self.z.get()]
-
+ 
     def write_marks(self):
         f = open('positions.csv', 'w+')
         for i in range(len(self.marks)):
@@ -366,5 +450,5 @@ class myGui:
         f.close()
 
 root = tk.Tk()
-my = myGui(root,'COM1', 'COM2', 0)
+my = myGui(root,'COM2', 'COM6', 1)
 root.mainloop()
