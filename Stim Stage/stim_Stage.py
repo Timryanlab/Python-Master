@@ -319,7 +319,13 @@ class myGui:
             self.inverter_button.configure(bg = 'magenta')
  
     def get_position(self):
-        [x,y,z] = pyasi.get_positions(self.ser_s)
+        fl = 0
+        while fl is 0:
+            try:
+                [x,y,z] = pyasi.get_positions(self.ser_s)
+                fl = 1
+            except:
+                fl = 0
         self.x.set(x)
         self.y.set(y)
         self.z.set(z)

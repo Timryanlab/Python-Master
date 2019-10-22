@@ -1,6 +1,7 @@
 import serial
 
 def get_positions(ser):
+    ser.reset_input_buffer()
     ser.write(b'W X\r')
     string = ser.readline()
     x = float(string[3:-3])
