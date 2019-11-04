@@ -85,9 +85,11 @@ class myGui:
         self.response.set('NA')
         self.command_response = tk.Label(self.com_frame, textvariable = self.response)
         self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_asi_command)
+        self.reset_button = tk.Button(self.com_frame, text = "RESET", command = self.stage_reset)
         self.com_frame_title.grid(row = 0, column = 0 , columnspan = 2)
         self.command_line.grid(row = 1)
         self.command_response.grid(row = 2)
+        self.reset_button.grid(row = 2, column = 1)
         self.cmd_button.grid(row = 1, column = 1)
      
     def build_dual_camera(self):
@@ -273,6 +275,7 @@ class myGui:
         if(self.ser_arduino.in_waiting > 0):
             string = self.ser_arduino.readline()
             self.camera.set(string[0:-1])
+            self.framenum = int(self.camera.get())
         self.arduino.after(5,self.check_camera)
 
     def clear_mark(self):
@@ -342,6 +345,7 @@ class myGui:
 
     def send_asi_command(self):
         self.response.set(pyasi.send_command(self.ser_s,self.cmd.get() + '\r'))
+        print(self.response.get())
       
     def setup_arduino(self, ser):
         flag = 1
@@ -368,8 +372,7 @@ class myGui:
             except:
                 flag = 1
         print('complete\n')
-        self.ser_s.write(b'vb z=3\r')
-        #self.ser_s.readline()
+        self.stage_reset()
         self.stage = tk.Frame(self.root, bd = 2, relief = 'sunken') # Define frame for
         self.build_axes()
         self.build_focus()
@@ -393,6 +396,12 @@ class myGui:
             self.simultaneous_button.configure(bg = 'green')
         else:
             self.simultaneous_button.configure(bg = 'magenta')
+
+    def stage_reset(self):
+        self.ser_s.write(b'reset\r')
+        self.ser_s.readline()
+        self.ser_s.write(b'vb z=3\r')
+        self.ser_s.readline()
 
     def stimulate(self): 
         self.com_response.set(ac.send_command(self.ser_arduino,"S"))
