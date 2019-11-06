@@ -3,6 +3,7 @@
 import tkinter as tk
 import ardcom as ac
 import serial
+import time
 import pyasi
 import csv
 
@@ -27,6 +28,10 @@ class myGui:
             self.build_storm_wave()
             self.com_frame.grid(row = 2, column = 1, columnspan = 2, padx = 2, pady = 2)
             self.storm_wave_frame.grid(row = 2, column = 0)
+            self.build_channel_calibration()
+            self.build_dual_camera()
+            self.dual_camera_frame.grid(row = 2, column = 0)
+            self.cal_frame.grid(row=3)
         if self.debug_state == 2: # SYN-ATP scope Config
             print('NO')
         if self.debug_state == 3: # The Bear scope Config
@@ -74,6 +79,43 @@ class myGui:
         self.current_y.grid(row = pos_row + 1, column = pos_col + 1, sticky = 'W')
         self.current_z.grid(row = pos_row + 2, column = pos_col + 1, sticky = 'W')
 
+    def build_channel_calibration(self):
+        self.cal_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
+        self.channel_button = tk.Button(self.cal_frame, text = "Scan", command = self.channel_calibration)
+        self.cal_steps_x = tk.StringVar()
+        self.cal_steps_y = tk.StringVar()
+        self.cal_dx = tk.StringVar()
+        self.cal_dy = tk.StringVar()
+        self.cal_steps_x.set('10')
+        self.cal_steps_y.set('10')
+        self.cal_dx.set('0.1')
+        self.cal_dy.set('0.1')
+        self.cal_x_entry = tk.Entry(self.cal_frame, textvariable= self.cal_steps_x, width =5)
+        self.cal_y_entry = tk.Entry(self.cal_frame, textvariable= self.cal_steps_y, width =5)
+        self.cal_dx_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dx, width =5)
+        self.cal_dy_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dy, width =5)
+        self.cal_percentage = tk.StringVar()
+        self.cal_percentage.set('0%')
+        self.cal_status = tk.Label(self.cal_frame, textvariable = self.cal_percentage)
+        self.cal_title = tk.Label(self.cal_frame, text = 'Raster Scan')
+        self.cal_x_label = tk.Label(self.cal_frame,text = ' x steps @ ')
+        self.cal_y_label = tk.Label(self.cal_frame,text = ' y steps @ ')
+        self.cal_x_unit = tk.Label(self.cal_frame, text = ' um spacing')
+        self.cal_y_unit = tk.Label(self.cal_frame, text = ' um spacing')
+        
+        # Gridding
+        self.cal_x_entry.grid(row=1, column = 0)
+        self.cal_x_label.grid(row=1, column = 1)
+        self.cal_dx_entry.grid(row = 1, column = 2)
+        self.cal_x_unit.grid(row = 1, column = 3)
+
+        self.cal_y_entry.grid(row=2, column=0)
+        self.cal_y_label.grid(row=2, column=1)
+        self.cal_dy_entry.grid(row=2, column=2)
+        self.cal_y_unit.grid(row=2, column=3)
+        self.channel_button.grid(row=1, column = 4, rowspan = 2)
+        self.cal_status.grid(row=1, column =5, rowspan =2)
+
     def build_com_box(self):
         # Communication Box
         self.com_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
@@ -86,12 +128,13 @@ class myGui:
         self.command_response = tk.Label(self.com_frame, textvariable = self.response)
         self.cmd_button = tk.Button(self.com_frame, text = "Send", command = self.send_asi_command)
         self.reset_button = tk.Button(self.com_frame, text = "RESET", command = self.stage_reset)
+        
         self.com_frame_title.grid(row = 0, column = 0 , columnspan = 2)
         self.command_line.grid(row = 1)
         self.command_response.grid(row = 2)
         self.reset_button.grid(row = 2, column = 1)
         self.cmd_button.grid(row = 1, column = 1)
-     
+        
     def build_dual_camera(self):
         self.dual_camera_frame =tk.Frame(self.root, bd =2 , relief = 'sunken')
         self.external_trigger_button = tk.Button(self.dual_camera_frame, text = 'Ext. Trigger', bg = 'magenta', command = self.external_trigger)
@@ -187,6 +230,34 @@ class myGui:
         self.wave_button.grid(row = 3, column = 1)
         self.uv_laser_button.grid(row=3, column = 0)
  
+    def channel_calibration(self):
+        sign = ''
+        ysteps = int(self.cal_steps_y.get())
+        xsteps = int(self.cal_steps_x.get())
+        dx = 10*float(self.cal_dx.get())
+        dy = 10*float(self.cal_dy.get())
+        for y in range(ysteps):
+            time.sleep(0.05)
+            for x in range(xsteps):
+                stng = 'R X='+ sign + str(dx) +'\r'
+                pyasi.send_command(self.ser_s,stng)
+                time.sleep(0.1)
+                ac.send_command(self.ser_arduino,'t')
+                time.sleep(0.05)
+            per = 100*float(y)/float(ysteps)
+            self.cal_percentage.set(str(per)+'%')    
+            pyasi.send_command(self.ser_s,'R Y='+str(dy)+'\r')
+            time.sleep(0.1)
+            ac.send_command(self.ser_arduino,'t')
+            if y%2 is 1:
+                sign = ''
+            else:
+                sign ='-'
+        time.sleep(0.05)
+        strng = 'R Y='+str(-dy*(1+ysteps))+'\r'
+        print(strng)
+        pyasi.send_command(self.ser_s, strng)
+
     def camera_frame_setup(self):
         w = 5
         # Define Com Response
@@ -275,7 +346,6 @@ class myGui:
         if(self.ser_arduino.in_waiting > 0):
             string = self.ser_arduino.readline()
             self.camera.set(string[0:-1])
-            self.framenum = int(self.camera.get())
         self.arduino.after(5,self.check_camera)
 
     def clear_mark(self):
