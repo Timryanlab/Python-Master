@@ -79,6 +79,7 @@ def load_image_to_array(file, start = 0, stop = 0):
         return load_fits_to_array(file, start, stop)  
     
 def load_tiff_to_array(fname, start = 0, stop = 0):
+
     """This function will take in a string as a file location and file name
        It will return a Numpy Array of the image at this location"""
     im = Image.open(fname) #Initial call to image datafile
@@ -157,6 +158,13 @@ def show_as_image(image_frame, title = None):
     """
     plt.imshow(image_frame)
     plt.title(title)
+
+def show_frame_stack(image_stack, title = 'Image'):
+    m,n,o = image_size(image_stack)
+    for i in range(o):
+        plt.imshow(image_stack[:,:,i])
+        plt.title(title + ' frame {}'.format(i))
+        plt.figure()
     
 def grab_image_files(folder):
     """Takes a list of folder contents and returns a list of images only"""
