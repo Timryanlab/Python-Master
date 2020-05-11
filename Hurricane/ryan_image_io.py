@@ -67,11 +67,33 @@ def load_fits_to_array(file, start=0, stop=0):
             for i in range(o):
                 image_out[:,:,i] = image_stack[i,:,:]
                 
-                return image_out
+            return image_out
         else:
             return image_stack
 
 def load_image_to_array(file, start = 0, stop = 0): 
+    '''
+    load_image_to_array takes in a file name (start / stop frame, and outputs the resulting image array)
+
+    Parameters
+    ----------
+    file : str,
+        Contains the filepath + filename of to be opened
+    start : int, optional
+        Integer starting frame of the file
+        If stop == 0, specifying start will return only the (start)th frame
+        The default is 0.
+    stop : int, optional
+        Integer specifing the final frame to load from the file.
+        The default is 0.
+
+    Returns
+    -------
+    numpy array
+        A 3D numpy pixel array organized by (height, width, frame) indexing.
+        This is the numpy representation of the data
+
+    '''
     filename, file_extension = os.path.splitext(file) # split filename to check extension
     if file_extension == '.tif':
         return load_tiff_to_array(file, start, stop)
