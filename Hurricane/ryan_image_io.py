@@ -143,7 +143,7 @@ def load_tiff_to_array(fname, start = 0, stop = 0):
             image_array[:,:,i]= np.array(im) #Populate data into preallocated variable
             
     if (start == 0) and (stop == 0): # Here we want the whole data set
-        image_array = np.zeros((m,n,stop))
+        image_array = np.zeros((m,n,o))
         for i in range(o):
             im.seek(i) #Seek to frame i in image stack
             image_array[:,:,i]= np.array(im) #Populate data into preallocated variable          
@@ -160,8 +160,11 @@ def save_array_as_image(array, file):
 def save_array_to_fits(array, file):
     m,n,o = image_size(array)
     re_image = np.zeros((o,m,n))
-    for i in range(o):
-        re_image[i,:,:] = array[:,:,i]
+    if o > 1:
+        for i in range(o):
+            re_image[i,:,:] = array[:,:,i]
+    else:
+        re_image = array
     hdu = fits.PrimaryHDU(re_image)
     hdu.writeto(file)
 
@@ -169,8 +172,11 @@ def save_array_to_tiff(array, file):
     """Function to save an array as a multipage tiff"""
     m,n,o = image_size(array)
     Im = []
-    for i in range(o):
-        Im.append(Image.fromarray(array[:,:,i]))
+    if i > 1:
+        for i in range(o):
+            Im.append(Image.fromarray(array[:,:,i]))
+    else:
+        Im = array
     Im[0].save(file, save_all=True,
                append_images=Im[1:])
     # This appears to work properly

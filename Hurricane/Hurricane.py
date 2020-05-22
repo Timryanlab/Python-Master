@@ -15,8 +15,11 @@ from numba import cuda
 from numba import vectorize, float64
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.special import erf
 import os
+
+# Defintions for GPU codes to double precision
+EXP = 2.71828182845904523536028747135
+PI  = 3.14159265358979311599796346854
 
 #%% GPU Accelerated Code
 #%%
@@ -112,8 +115,6 @@ def gpu_image_segment(images, psf_image_array, centers, pixel_width):
         if (i<psf_image_array.shape[0]) and (j<psf_image_array.shape[1]) and (k<psf_image_array.shape[2]):
             psf_image_array[i,j,k] = images[centers[k,0] + ii, centers[k,1] + jj, centers[k,2]]
             #psf_image_array[i,j,k] = k
-        
-    
 
 #%% Functions
 def count_peaks(peak_image, blanking = 0, seperator = 190):
@@ -261,7 +262,37 @@ def find_peaks(image, threshold = -1, pixel_width = 5):
     gpu_peaks[griddim, blockdim](np.ascontiguousarray(image), np.ascontiguousarray(image2), np.ascontiguousarray(threshold), np.ascontiguousarray(pixel_width))
     return image2
 
+def erf(x, n=20):    
+    er = 0
+    for i in range(n):
+        er += (-1)**i*(x**(2*i))/((2*i+1)*factorial(i))
+    
+    return 2*x*er*PI**(-0.5)
+
+def factorial(x):
+    c = 1
+    while x >1:
+        c= c*x
+        x-=1
+    return c
+
 def gauss_and_derivatives(psf, fit_vector):
+    """
+    
+
+    Parameters
+    ----------
+    psf : numpy array
+        input image to model.
+    fit_vector : numpy array
+        Vector containing fit positions.
+
+    Returns
+    -------
+    corrections : TYPE
+        DESCRIPTION.
+
+    """
     pixel_width = int((psf.shape[0]-1)/2)
     x_build = np.linspace(-pixel_width,pixel_width,2*pixel_width +1)
     X , Y = np.meshgrid(x_build, x_build)
@@ -270,25 +301,47 @@ def gauss_and_derivatives(psf, fit_vector):
     x_gauss = 0.5 * (erf( (X - fit_vector[0] + 0.5) / (np.sqrt(2 * fit_vector[3]**2))) - erf( (X - fit_vector[0] - 0.5) / (np.sqrt(2 * fit_vector[3]**2))))
     y_gauss = 0.5 * (erf( (Y - fit_vector[1] + 0.5) / (np.sqrt(2 * fit_vector[4]**2))) - erf( (Y - fit_vector[1] - 0.5) / (np.sqrt(2 * fit_vector[4]**2))))
     psf_guess = fit_vector[2]*x_gauss*y_gauss + fit_vector[5]
-    derivatives = [ np.multiply(fit_vector[2]/(np.sqrt(np.pi*2*fit_vector[3]**2))*(np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2)) -np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2))),y_gauss), # x-derivative
-                    np.multiply(fit_vector[2]/(np.sqrt(np.pi*2*fit_vector[4]**2))*(np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2)) -np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2))),x_gauss), # y-derivative
-                    np.multiply(x_gauss,y_gauss), # N Derivative
-                    fit_vector[2]/(np.sqrt(np.pi*2)*fit_vector[3]**2)*np.multiply((np.multiply((X - fit_vector[0] - 0.5) , np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2))) - np.multiply((X - fit_vector[0] + 0.5) , np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))),y_gauss), # x-sigma derivative
-                    fit_vector[2]/(np.sqrt(np.pi*2)*fit_vector[4]**2)*np.multiply((np.multiply((Y - fit_vector[1] - 0.5) , np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2))) - np.multiply((Y - fit_vector[1] + 0.5) , np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))),x_gauss), # y-sigma derivative
+    derivatives = [ (fit_vector[2]/(np.sqrt(np.pi*2*fit_vector[3]**2))*
+                     (np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2)) -
+                      np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2))))*y_gauss, # x-derivative
+                   
+                    (fit_vector[2]/(np.sqrt(np.pi*2*fit_vector[4]**2))*
+                     (np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2)) -
+                      np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2))))*x_gauss, # y-derivative
+                    
+                    x_gauss*y_gauss, # N Derivative
+                    
+                    fit_vector[2]/(np.sqrt(np.pi*2)*fit_vector[3]**2)*(
+                        (X - fit_vector[0] - 0.5) * np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2)) - 
+                        (X - fit_vector[0] + 0.5) * np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))
+                    *y_gauss, # x-sigma derivative
+                    
+                    fit_vector[2]/(np.sqrt(np.pi*2)*fit_vector[4]**2)*(
+                        (Y - fit_vector[1] - 0.5) * np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2)) - 
+                        (Y - fit_vector[1] + 0.5) * np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))
+                   * x_gauss, # y-sigma derivative
+                   
                     1] # derivative background
-    second_derivatives = [ fit_vector[2]/np.sqrt(2*np.pi)*fit_vector[3]**3*np.multiply(y_gauss, np.multiply((X - fit_vector[0] - 0.5), np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2))) - np.multiply((X - fit_vector[0] + 0.5), np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))), # x-derivative
-                           fit_vector[2]/np.sqrt(2*np.pi)*fit_vector[4]**3*np.multiply(x_gauss, np.multiply((Y - fit_vector[1] - 0.5), np.exp(-(X-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2))) - np.multiply((Y - fit_vector[1] + 0.5), np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))), # y-derivative
+    
+    second_derivatives = [ fit_vector[2]/np.sqrt(2*np.pi)*fit_vector[3]**3*
+                          (y_gauss*((
+                              (X - fit_vector[0] - 0.5)* np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2))) - 
+                              (X - fit_vector[0] + 0.5)* np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))), # x-derivative
+                           fit_vector[2]/np.sqrt(2*np.pi)*fit_vector[4]**3*
+                           (x_gauss*((
+                              (Y - fit_vector[1] - 0.5)* np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2))) - 
+                              (Y - fit_vector[1] + 0.5)* np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))), # y-derivative
                            0, # N 2nd Derivative
                            fit_vector[2]/(np.sqrt(2*np.pi))*
                            y_gauss*((((X - fit_vector[0] - 0.5)**3)*np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2))-
                                      ((X - fit_vector[0] + 0.5)**3)*np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))/(fit_vector[3]**5) - 
                                     2/(fit_vector[3]**3)*(((X - fit_vector[0] - 0.5)**1)*np.exp(-(X-fit_vector[0] - 0.5)**2/(2*fit_vector[3]**2))-
-                                                            ((X - fit_vector[0] + 0.5)**1)*np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))), # x-sigma 2nd derivative
+                                                          ((X - fit_vector[0] + 0.5)**1)*np.exp(-(X-fit_vector[0] + 0.5)**2/(2*fit_vector[3]**2)))), # x-sigma 2nd derivative
                            fit_vector[2]/(np.sqrt(2*np.pi))*
                            x_gauss*((((Y - fit_vector[1] - 0.5)**3)*np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2))-
                                      ((Y - fit_vector[1] + 0.5)**3)*np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))/(fit_vector[4]**5) - 
                                     2/(fit_vector[4]**3)*(((Y - fit_vector[1] - 0.5)**1)*np.exp(-(Y-fit_vector[1] - 0.5)**2/(2*fit_vector[4]**2))-
-                                                            ((Y - fit_vector[1] + 0.5)**1)*np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))), # y-sigma 2nd derivative
+                                                          ((Y - fit_vector[1] + 0.5)**1)*np.exp(-(Y-fit_vector[1] + 0.5)**2/(2*fit_vector[4]**2)))), # y-sigma 2nd derivative
                            0] # 2nd derivative background
     dx = np.sum(derivatives[0]*(psf/psf_guess -1))
     dy = np.sum(derivatives[1]*(psf/psf_guess -1))
@@ -312,15 +365,23 @@ def gauss_and_derivatives(psf, fit_vector):
                    - db/ddb]
     
     return corrections
-                         
-def fit_psf(psf):
+def fit_psf_array(psf_image_array):
+    fits = []
+    for i in range(psf_image_array.shape[2]):#loop over all molecules in array
+        fits.append(fit_psf(psf_image_array[:,:,i]))
+    return np.array(fits)
+        
+def fit_psf(psf, figures = False):
     """
-    
+    A CPU based maximum likelihood estimation of a gaussian spatial distribution 
+    of photons on a pixel grid
 
     Parameters
     ----------
     psf : numpy 2D image array
         2D image of a point spread function to be fit.
+    figures: boolean
+        Determines whether or not to show figures of a fit
 
     Returns
     -------
@@ -333,7 +394,7 @@ def fit_psf(psf):
     #Build mesh grid for vector calculation
     x_build = np.linspace(-pixel_width,pixel_width,2*pixel_width +1)
     X , Y = np.meshgrid(x_build, x_build)
-    fit_vector = [np.sum(np.multiply(psf,X))/np.sum(psf) , np.sum(np.multiply(psf,Y))/np.sum(psf), np.sum(psf), 1.2, 1.2, np.min(psf)] # Initial vector guess [xc, yc, N, sx, sy, background]
+    fit_vector = [np.sum(np.multiply(psf,X))/np.sum(psf) , np.sum(np.multiply(psf,Y))/np.sum(psf), np.sum(psf), 2, 2, np.min(psf)] # Initial vector guess [xc, yc, N, sx, sy, background]
     cycles = 20
     tracks = np.zeros((cycles,6))
     for i in range(cycles): # Here is the analysis
@@ -341,20 +402,63 @@ def fit_psf(psf):
         for j in range(6):
             fit_vector[j] += corrections[j]
         tracks[i,:] = fit_vector
-    plt.figure()
-    plt.plot(tracks[:,0], color = 'k')
-    plt.plot(tracks[:,1], color = 'g')
-    plt.plot(tracks[:,3], color = 'c')
-    plt.plot(tracks[:,4], color = 'b')
-    plt.title("Settling of fitting variables over fitting iterations")
-    plt.ylabel('Fitting variable in various units')
-    plt.xlabel('Fitting iteration')
-    plt.show()
-    
-
+    if figures == True:
+        plt.figure()
+        plt.plot((tracks[:,0]-tracks[-1,0])/tracks[-1,0], color = 'k', label = 'xf')
+        plt.plot((tracks[:,1]-tracks[-1,1])/tracks[-1,1], color = 'g', label = 'yf')
+        plt.plot((tracks[:,3]-tracks[-1,3])/tracks[-1,3], color = 'c', label = 'sx')
+        plt.plot((tracks[:,4]-tracks[-1,4])/tracks[-1,4], color = 'b', label = 'sy')
+        plt.legend()
+        plt.title("Settling of fitting variables over fitting iterations")
+        plt.ylabel('(F(i) - F(end))/F(end)')
+        plt.xlabel('Fitting iteration')
+        plt.show()
     
     return fit_vector
+
+def gpu_psf_array_fit(psf_image_array, rotation = 0, cycles = 10):
+    """
+    CPU side wrapper for a GPU segmentation of an image stack
+
+    Parameters
+    ----------
+    images : numpy array [m,n,o]
+        Numpy Image array to be segmented.
+    centers : numpy array [N,3]
+        Array of N 3D locations of peaks to be segmented.
+    pixel_width : int
+        Radial width of segmentation. 
+
+    Returns
+    -------
+    psf_image_array : numpy array shape [N,(2*pixel_width + 1)^2]
+        Final image array for localization.
+
+    """
+    # Variable preallocation
+    m,n,o = image_size(psf_image_array)
+    fit_vectors = np.zeros((o,6))
+    cr_lower_bounds = np.zeros((o,7))
+    x_build = np.linspace(-pixel_width,
+                          pixel_width,
+                          2*pixel_width +1)
     
+    x, y = np.meshgrid(x_build, x_build)
+    X = x*np.cos(rotation) - y*np.sin(rotation)
+    Y = x*np.sin(rotation) + y*np.cos(rotation)
+    grid = [X,Y]
+    
+   #GPU Specification
+ 
+    blockdim = (1024)
+    griddim = (o)
+    gpu_fit_psf_array[griddim, blockdim](np.ascontiguousarray(psf_image_array), 
+                                         np.ascontiguousarray(fit_vectors), 
+                                         np.ascontiguousarray(cr_lower_bounds), 
+                                         np.ascontiguousarray(grid),
+                                         np.ascontiguousarray(cycles))            
+    #GPU Call  
+    return fit_vectors, cr_lower_bounds
     
 #%% Localization Class    
 #%% Main Workspace
@@ -362,7 +466,7 @@ if __name__ == '__main__':
     fpath = "D:\\Dropbox\\Data\\3-3-20 glut4-vglutmeos\\" # Folder
     fname = "cell10_dz20_r2.tif" # File name
     #%% Load Image
-    im = load_image_to_array(fpath + fname, 20) # Load image into workspace
+    im = load_image_to_array(fpath + fname,  20) # Load image into workspace
     print(im.shape) # Print shape
     
     #%% Subtract Background using rolling ball subtraction
@@ -404,8 +508,12 @@ if __name__ == '__main__':
     
     psf = psf_image_array[:,:,2]
     
-    fits = fit_psf(psf)
+    fits = fit_psf(psf, True)
     print("For The Generated Image, it was found with position ({},{}) , with {} photons. ".format(np.round(fits[0]+6,3),np.round(6+fits[1],3),np.round(fits[2],3)))
     print("The width was {} pixels in 'x', and {} pixels in 'y', background = {}. ".format(np.round(fits[3],3),np.round(fits[4],3),np.round(fits[5],3)))
     show_as_image(psf)    
     # Save relevant data
+    fits = fit_psf_array(psf_image_array)
+    #%% GPU Fitting Section
+    #fit_gpu, crlbs = gpu_psf_array_fit(psf_image_array)
+    

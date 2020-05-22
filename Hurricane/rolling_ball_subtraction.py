@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from ryan_image_io import *
+import cupy as cp
 
 #%% Important constants
 DEVICE_LIMIT = 190*388*2000 #Empirical hard limit in maximum pixels of a setup running a Geforce 1070 TI as the sole graphics card
@@ -327,7 +328,23 @@ def batch_these_files(files, folder = os.getcwd(), background = False, gauss_sig
 
 
     
-
+def cupy_rolling_ball(images, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6):
+    # Get Image Parameters
+    m,n,o = image_size(images)
+    pixels = m*n*o #assuming 64 bit images from now on
+    
+    #Morphological Opening structures
+    kernel = cp.asarray(make_gaussian_kernel(gauss_sigma)) #Make normalized gaussian kernel
+    # Make a grayscale 'ball'
+    sphere_kernel = cp.asarray(make_a_sphere(radius = rolling_ball_radius, height = rolling_ball_height) )
+    
+    #Make device
+    images1 = cp.asarray(images)
+    images2 = cp.empty_like(images)
+    images3 = cp.empty_like(images) # Preallocate array for images
+    for i in range(o):
+        cupy.cupyx.ndimage.convolve(image1[:,:,i], kernel, images2[:,:,i])
+    return cp.asnumpy(images2)
     
 #%% Working Namespace Section of Code
 if __name__ == '__main__':
@@ -344,7 +361,7 @@ if __name__ == '__main__':
     fname = "cell10_dz20_r2.tif" # File name
     im = load_image_to_array(fpath + fname) # Load image into workspace
     
-    print("The Image we loaded has {} rows {} columns and {} frames".format(im.shape[0],im.shape[1],im.shape[2])) # Print shape of image
+    print("The Image we loaded has {} rows {} columns and {} frames".format(im.shape[0],im.shape[1],1)) # Print shape of image
     
     #%%    Post loading image example section
 
@@ -358,4 +375,7 @@ if __name__ == '__main__':
     show_as_image(image_background[:,:,0])
     plt.title('Background Frame')
     #Andrew Nelson 5/4/2020
-   
+    images_no_background, image_background = cupy_rolling_ball(im[:,:,0:500],
+                                                                     gauss_sigma = 2.5, 
+                                                                     rolling_ball_radius = 6,
+                                                                     rolling_ball_height= 6)

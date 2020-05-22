@@ -118,6 +118,7 @@ def pair_image_files(files):
 #% Main Workspace
 if __name__ == '__main__':
     file_path = 'D:\\Image Processing Folder\\Background Subtractions for Ryan\\'
+    file_save_path = 'D:\\Dropbox\\test batch\\Examples of ER-Halo Masking\\'
     files = grab_image_files(os.listdir(file_path))
     pairs = pair_image_files(files)
     file_pair = pairs[0]
@@ -129,6 +130,8 @@ if __name__ == '__main__':
     plt.title('Original Frame 0 of Halo')
     plt.figure()
      # Rolling ball subtraction of halo image
+    save_array_as_image(  er_image, file_save_path + file_pair[0][:-5] + '.tif')
+    save_array_as_image(halo_image, file_save_path + file_pair[1][:-5] + '.tif')
     halo_background_subtracted, background = rolling_ball_subtraction(halo_image,
                                                           gauss_sigma = 2.5,
                                                           rolling_ball_height = 6,
@@ -137,6 +140,8 @@ if __name__ == '__main__':
     plt.title("Background subtracted Halo image")
     plt.figure()
     # Frame Average background subtracted Halo
+    save_array_as_image(  halo_background_subtracted, file_save_path + file_pair[1][:-5] + '_rbs.tif')
+    
     halo_image_average = np.mean(halo_background_subtracted,2)
     
    
@@ -151,8 +156,8 @@ if __name__ == '__main__':
          
     # create the dilated zone around the pixels of interest
     pixels_of_background = find_background_pixels(pixels_of_interest)    
- 
+    
     show_as_image(pixels_of_interest)
     plt.title('Thresholded @ {}x std above the median'.format(np.round(i,2)))
     plt.figure()
-    
+    save_array_as_image(pixels_of_interest, file_save_path + file_pair[1][:-5] + '_pixels.png' )
