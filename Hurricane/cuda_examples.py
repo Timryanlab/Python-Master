@@ -45,7 +45,8 @@ extern "C"
     if( index < images){ // ensure that the thread is working on a molecule
         double fits[6] = {0, 0, 0, 2.0, 2.0, 2000}; // preallocate fitting array
         double psf[pix*pix];
-        double pi = 3.14159265358979323846;
+        double pi = 3.14159265358979323846; // close enough
+        
         // populate fitting array with initial guesses
         for(int ii = 0; ii <pix*pix; ii++){
             int i = ii % pix;
@@ -64,32 +65,33 @@ extern "C"
         // for(int i= 0; i < 6; i++){fit_array[i+ index*6] = fits[i];}   AJN 5/21/20 everything written in this kernel after this line is untested
         
         // Begin the fitting loops
-        for(int cycle = 0; cycle < cycles; cycle ++){
+        for(int cycle = 0; cycle < cycles; cycle ++){ // Begin Fitting Cycle Loop
             
             double psf_pixel, Ex, Ey, xp, xm, yp, ym;
             double dx, dy, dn, dsx, dsy, db;
             double ddx, ddy, ddn, ddsx, ddsy, ddb;
             // Calculate pixel values for derivatives, 2nd derivatives, errorfunctions and u
-			for (int row = 0; row < pix; row++){	// FOR 2  loops over all rows
-				for (int col = 0; col < pix; col++){	// FOR 3 loops over all columns
+			for (int row = 0; row < pix; row++){	// Begin Row Loop
+				for (int col = 0; col < pix; col++){	// Begin column loop
                     // Initialize calculation arrays
                     double derivative[6] = {0, 0, 0, 0, 0, 0};
                     double derivative_2[6] = {0, 0, 0, 0, 0, 0};
                     
-                    xp = (xgrid[row + col*pix] - fits[0] + 0.5);
-                    xpg = exp(-powf(xp,2)/(2*powf(fits[3],2)));
-                    xm = (xgrid[row + col*pix] - fits[0] - 0.5); // these terms are very regularly used in the subsequent calculations
-                    xmg = exp(-powf(xm,2)/(2*powf(fits[3],2)));
+                    // these terms are very regularly used in the subsequent calculations
+                    double xp = (xgrid[row + col*pix] - fits[0] + 0.5); // short for 'x-plus' indicates that relative half pixel shift in the positive direction
+                    double xpg = exp(-powf(xp,2)/(2*powf(fits[3],2)));  // This is the corresponding gaussian value
+                    double xm = (xgrid[row + col*pix] - fits[0] - 0.5); // by contrast the negative direction
+                    double xmg = exp(-powf(xm,2)/(2*powf(fits[3],2)));
                     
-                    yp = (ygrid[row + col*pix] - fits[1] + 0.5);
-                    ypg = exp(-powf(yp,2)/(2*powf(fits[4],2)));
-                    ym = (ygrid[row + col*pix] - fits[1] - 0.5);
-                    ymg = exp(-powf(ym,2)/(2*powf(fits[4],2)));
+                    double yp = (ygrid[row + col*pix] - fits[1] + 0.5); // Corresponding y values
+                    double ypg = exp(-powf(yp,2)/(2*powf(fits[4],2)));
+                    double ym = (ygrid[row + col*pix] - fits[1] - 0.5);
+                    double ymg = exp(-powf(ym,2)/(2*powf(fits[4],2)));
                     
                     // Define the estimated gaussian
-                    Ex = 0.5 * (erf(xp / sqrt(2.0 * fits[3] * fits[3])) - erf(xm / sqrt(2.0 * fits[3] * fits[3]))); // x component gaussian
-					Ey = 0.5 * (erf(yp / sqrt(2.0 * fits[4] * fits[4])) - erf(ym / sqrt(2.0 * fits[4] * fits[4]))); // Y component gaussian
-					u = fits[2]*Ex*Ey + fits[5]; // pixel of estimated PSF
+                    double Ex = 0.5 * (erf(xp / sqrt(2.0 * powf(fits[3], 2))) - erf(xm / sqrt(2.0 * powf(fits[3], 2)))); // x component gaussian
+					double Ey = 0.5 * (erf(yp / sqrt(2.0 * powf(fits[4], 2))) - erf(ym / sqrt(2.0 * powf(fits[4], 2)))); // Y component gaussian
+					double u = fits[2]*Ex*Ey + fits[5]; // pixel of estimated PSF
                     
                     // Calculate pixel contributions to derivative
                     derivative[0] = Ey*fits[2]/(sqrt(pi*2)*fits[3])*(xmg - xpg);
@@ -99,20 +101,23 @@ extern "C"
                     derivative[4] = Ex*fits[2]/(sqrt(pi)*powf(fits[4],2))*( ym* ymg - yp* ypg);
                     derivative[5] = 1;
                     
-                    derivative_2[0] = Ey*fits[2]/sqrt(2*pi)*powf(fits[3],3))*(xm*xmg - xp*xpg);
-                    derivative_2[1] = Ex*fits[2]/sqrt(2*pi)*powf(fits[4],3))*(ym*ymg - yp*ypg);
+                    derivative_2[0] = Ey*fits[2]/sqrt(2*pi)*powf(fits[3],3)*(xm*xmg - xp*xpg);
+                    derivative_2[1] = Ex*fits[2]/sqrt(2*pi)*powf(fits[4],3)*(ym*ymg - yp*ypg);
                     derivative_2[2] = 0;
                     derivative_2[3] = Ey*fits[2]/sqrt(2*pi)*((powf(xm,3)*xmg - powf(xp, 3)*xpg)/powf(fits[3],5) - 2*(xm*xmg - xp*xpg)/powf(fits[3],3));
                     derivative_2[4] = Ex*fits[2]/sqrt(2*pi)*((powf(ym,3)*ymg - powf(yp, 3)*ypg)/powf(fits[4],5) - 2*(ym*ymg - yp*ypg)/powf(fits[4],3));
                     derivative_2[5] = 0;
                     
-                    // I'm reasonably confident that these work'
+                    // I'm reasonably confident that these work' From here we just have to add the correction to the sum
                 
-                }
-            }
-        }
-    }
-}
+                } // Finish Column loop
+            } // Finish Row Loop
+            // here we have to update the fitting vector with the corrections determined from above    
+        } // Finish Fitting Cycle Loop
+        // assign final fitting parameters to output vector
+        for(int i= 0; i < 6; i++){fit_array[i+ index*6] = fits[i];}
+    } // Finish PSF calculation
+} // Finish Kernel
 ''', 'fitting_kernel')
 
 def gpu_psf_fit(images):
@@ -179,5 +184,5 @@ if __name__ == '__main__':
     #psf_image_array[0,0,1] = 26
     gpu_fits = cp.empty_like(cp.asarray(fits))
     gpu_psf = cp.asarray(psf_image_array)
-    fitting_kernel((4,),(1,),(gpu_psf,gpu_fits, 0, gpu_psf.shape[2]))
+    fitting_kernel((4,),(1,),(gpu_psf,gpu_fits, 0, gpu_psf.shape[2], 10))
     print(gpu_fits)
