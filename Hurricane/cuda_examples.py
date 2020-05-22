@@ -11,6 +11,8 @@ Created on Thu May 21 13:34:41 2020
 from ryan_image_io import *
 from Hurricane import *
 import cupy as cp
+import matplotlib.pyplot as plt
+import scipy
 #%% Functions
 
 '''
@@ -43,7 +45,7 @@ extern "C"
 	}
     
     if( index < images){ // ensure that the thread is working on a molecule
-        double fits[6] = {0, 0, 0, 2.0, 2.0, 2000}; // preallocate fitting array
+        double fits[6] = {0, 0, 0, 1.6, 1.6, 200}; // preallocate fitting array
         double psf[pix*pix];
         double pi = 3.14159265358979323846; // close enough
         
@@ -57,6 +59,9 @@ extern "C"
             fits[2] += psf[ii];           // Estimate initial photon emission load
             if( fits[5] > psf[ii]){fits[5] = psf[ii];} // estimate offset
         }
+        for(int i = 0; i<pix; i++){
+        
+        }
         fits[0] = fits[0]/fits[2]; // Get center of mass by dividing through the sum        
         fits[1] = fits[1]/fits[2]; // Center of mass y component
         
@@ -67,15 +72,18 @@ extern "C"
         // Begin the fitting loops
         for(int cycle = 0; cycle < cycles; cycle ++){ // Begin Fitting Cycle Loop
             
-            double psf_pixel, Ex, Ey, xp, xm, yp, ym;
-            double dx, dy, dn, dsx, dsy, db;
-            double ddx, ddy, ddn, ddsx, ddsy, ddb;
+            
+            double d_1[6] = {0, 0, 0, 0, 0, 0};
+            double d_2[6] = {0, 0, 0, 0, 0, 0};
+            
             // Calculate pixel values for derivatives, 2nd derivatives, errorfunctions and u
 			for (int row = 0; row < pix; row++){	// Begin Row Loop
 				for (int col = 0; col < pix; col++){	// Begin column loop
                     // Initialize calculation arrays
                     double derivative[6] = {0, 0, 0, 0, 0, 0};
                     double derivative_2[6] = {0, 0, 0, 0, 0, 0};
+                    
+                    double psf_pixel = psf[row + col*pix];
                     
                     // these terms are very regularly used in the subsequent calculations
                     double xp = (xgrid[row + col*pix] - fits[0] + 0.5); // short for 'x-plus' indicates that relative half pixel shift in the positive direction
@@ -94,25 +102,29 @@ extern "C"
 					double u = fits[2]*Ex*Ey + fits[5]; // pixel of estimated PSF
                     
                     // Calculate pixel contributions to derivative
-                    derivative[0] = Ey*fits[2]/(sqrt(pi*2)*fits[3])*(xmg - xpg);
-                    derivative[1] = Ex*fits[2]/(sqrt(pi*2)*fits[4])*(ymg - ypg);
+                    derivative[0] = Ey*fits[2]/(sqrt(2*pi)*fits[3])*(xmg - xpg);
+                    derivative[1] = Ex*fits[2]/(sqrt(2*pi)*fits[4])*(ymg - ypg);
                     derivative[2] = Ex*Ey;
-                    derivative[3] = Ey*fits[2]/(sqrt(pi)*powf(fits[3],2))*( xm* xmg - xp* xpg);
-                    derivative[4] = Ex*fits[2]/(sqrt(pi)*powf(fits[4],2))*( ym* ymg - yp* ypg);
+                    derivative[3] = Ey*fits[2]/(sqrt(2*pi)*powf(fits[3],2))*( xm* xmg - xp* xpg);
+                    derivative[4] = Ex*fits[2]/(sqrt(2*pi)*powf(fits[4],2))*( ym* ymg - yp* ypg);
                     derivative[5] = 1;
                     
-                    derivative_2[0] = Ey*fits[2]/sqrt(2*pi)*powf(fits[3],3)*(xm*xmg - xp*xpg);
-                    derivative_2[1] = Ex*fits[2]/sqrt(2*pi)*powf(fits[4],3)*(ym*ymg - yp*ypg);
+                    derivative_2[0] = Ey*fits[2]/(sqrt(2*pi)*powf(fits[3],3))*(xm*xmg - xp*xpg);
+                    derivative_2[1] = Ex*fits[2]/(sqrt(2*pi)*powf(fits[4],3))*(ym*ymg - yp*ypg);
                     derivative_2[2] = 0;
                     derivative_2[3] = Ey*fits[2]/sqrt(2*pi)*((powf(xm,3)*xmg - powf(xp, 3)*xpg)/powf(fits[3],5) - 2*(xm*xmg - xp*xpg)/powf(fits[3],3));
                     derivative_2[4] = Ex*fits[2]/sqrt(2*pi)*((powf(ym,3)*ymg - powf(yp, 3)*ypg)/powf(fits[4],5) - 2*(ym*ymg - yp*ypg)/powf(fits[4],3));
                     derivative_2[5] = 0;
                     
                     // I'm reasonably confident that these work' From here we just have to add the correction to the sum
+                    for (int i = 0 ; i<6; i++){d_1[i] +=  derivative[i] * (psf_pixel / u - 1); }
+                    for (int i = 0 ; i<6; i++){d_2[i] +=  derivative_2[0]*(psf_pixel / u - 1) - powf(derivative[0], 2) * psf_pixel/powf(u, 2); }
+
                 
                 } // Finish Column loop
             } // Finish Row Loop
-            // here we have to update the fitting vector with the corrections determined from above    
+            
+            for(int i = 0; i<6; i++){fits[i] -= d_1[i]/d_2[i];} // make the corrections
         } // Finish Fitting Cycle Loop
         // assign final fitting parameters to output vector
         for(int i= 0; i < 6; i++){fit_array[i+ index*6] = fits[i];}
@@ -124,65 +136,70 @@ def gpu_psf_fit(images):
     m,n,o = image_size(images)
     fits = cp.empty((o,6))
         
+def simulate_psf_array(N = 100, pix = 5):
+    psf_image_array = np.zeros((2*pix+1,2*pix+1,N))
+    x_build = np.linspace(-pix,pix,2*pix +1)
+    X , Y = np.meshgrid(x_build, x_build)
+    truths = np.zeros((N,6))
+    
+    for i in range(N):
+        # Start by Determining your truths
+        truths[i,0] = np.random.uniform(-0.5, 0.5)
+        truths[i,1] = np.random.uniform(-0.5, 0.5)
+        truths[i,2] = np.random.uniform(1000, 3000)
+        truths[i,3] = np.random.uniform(1.4, 1.401)
+        truths[i,4] = np.random.uniform(1.4, 1.401)
+        truths[i,5] = np.random.uniform(1, 3)
+        
+        x_gauss = 0.5 * (scipy.special.erf( (X - truths[i,0] + 0.5) / (np.sqrt(2 * truths[i,3]**2))) - scipy.special.erf( (X - truths[i,0] - 0.5) / (np.sqrt(2 * truths[i,3]**2))))
+        y_gauss = 0.5 * (scipy.special.erf( (Y - truths[i,1] + 0.5) / (np.sqrt(2 * truths[i,4]**2))) - scipy.special.erf( (Y - truths[i,1] - 0.5) / (np.sqrt(2 * truths[i,4]**2))))
+        #print(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
+        psf_image_array[:,:,i] = np.random.poisson(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
+    return psf_image_array, truths
+def display_results(gpu_results):
+    starting_with = gpu_results.shape[0]
+    gpu_results = gpu_results[~np.isnan(gpu_results[:,0]),:]
+    print('Recovered {}% of localization'.format(np.round(100*gpu_results.shape[0]/starting_with,2)))
+    x_bins = np.linspace(-0.5,0.5,100)
+    plt.hist(gpu_results[:,0], bins= x_bins, alpha = 0.5, label='x-difference')
+    plt.hist(gpu_results[:,1], bins= x_bins, alpha = 0.5, label='y-difference')
+    plt.legend(loc='upper right')
+    plt.title('X-Y Localization Errors')
+    plt.xlabel('Difference in Pixels')
+    plt.ylabel('Frequency')
+    plt.show()
+    
+    plt.figure()
+    
+    xbins = np.linspace(-0.4,0.1,100)
+    plt.hist(gpu_results[:,2], bins= xbins, label='n-difference')
+    #plt.hist(gpu_results[:,5], bins= xbins, label='b-difference')
+    plt.xlabel('Fractional Error in Gaussian Volume(Photons)')
+    plt.ylabel('Frequency')
+    plt.title('N Fractional Errors')
+    plt.show()
+    
+    plt.figure()
+    xbins = np.linspace(-0.4,0.8,100)
+    plt.hist(gpu_results[:,3], bins= xbins, label='sx-difference')
+    plt.hist(gpu_results[:,4], bins= xbins, label='sy-difference')
+    plt.legend(loc='upper right')
+    plt.title('Sigma Errors')
+    plt.show()
+    
+def test_gpu_fit(N = 100, show = False):
+    psfs, truths = simulate_psf_array(N)
+    print('Simulated')
+    gpu_fits = cp.empty_like(cp.asarray(truths))
+    gpu_psf = cp.asarray(psfs)
+    fitting_kernel((N,),(1,),(gpu_psf,gpu_fits, 0, gpu_psf.shape[2], 20))
+    gpu_differences = truths - cp.asnumpy(gpu_fits)
+    gpu_results = gpu_differences
+    gpu_results[:,2] /= truths[:,2]
+    if show: 
+        display_results(gpu_results)
+    return gpu_results, truths
 
 #%% Main Workspace
 if __name__ == '__main__':
-    fpath = "D:\\Dropbox\\Data\\3-3-20 glut4-vglutmeos\\" # Folder
-    fname = "cell10_dz20_r2.tif" # File name
-    #%% Load Image
-    im = load_image_to_array(fpath + fname,  20) # Load image into workspace
-    print(im.shape) # Print shape
-    
-    #%% Subtract Background using rolling ball subtraction
-    print('Subtracting Background')
-    gauss_sigma = 2.5
-    rolling_ball_radius = 6
-    rolling_ball_height = 6
-    pixel_width = 5
-    blanking = 2
-    threshold = 35
-    images_no_background, background_images = rolling_ball_subtraction(im,  gauss_sigma, rolling_ball_radius, rolling_ball_height)
-    print('Background Subtracted')
-    del im # No reason to keep too much memory
-    del background_images
-    # Wavelet denoising for peak indentification
-    # Saving this for later
-    
-    #%% Peak Identification
-    #GPU Peak Identification
-    
-    show_as_image(images_no_background[:,:,0])
-    plt.title('Background Subtracted Frame')
-    plt.figure()
-    image2 = find_peaks(images_no_background, threshold, pixel_width)
-    show_as_image(image2[:,:,0])
-    plt.title('Peaks')
-    # Because the Peak ID is parallelized it's just easier to keep it as part
-    # Of the main pipeline despite it's false positives. We can reject those easily
-    # On the other side of this by noting what frame we're on
-    
-    # Peak counting
-    centers = count_peaks(image2, blanking)
-    del image2
-    # Image Segmentation
-    # This can be performed on a GPU and the output can be fed into the localization algorithm
-    psf_image_array = segment_image_into_psfs(images_no_background, centers, pixel_width)
-
-    # Localization
-    
-    psf = psf_image_array[:,:,2]
-    
-    fits = fit_psf(psf, True)
-    print("For The Generated Image, it was found with position ({},{}) , with {} photons. ".format(np.round(fits[0]+6,3),np.round(6+fits[1],3),np.round(fits[2],3)))
-    print("The width was {} pixels in 'x', and {} pixels in 'y', background = {}. ".format(np.round(fits[3],3),np.round(fits[4],3),np.round(fits[5],3)))
-    show_as_image(psf)    
-    # Save relevant data
-    fits = fit_psf_array(psf_image_array)
-    #psf_image_array[2,1,3] = 26
-    #psf_image_array[1,0,0] = 26
-    #psf_image_array[0,1,0] = 26
-    #psf_image_array[0,0,1] = 26
-    gpu_fits = cp.empty_like(cp.asarray(fits))
-    gpu_psf = cp.asarray(psf_image_array)
-    fitting_kernel((4,),(1,),(gpu_psf,gpu_fits, 0, gpu_psf.shape[2], 10))
-    print(gpu_fits)
+    results, truths = test_gpu_fit(10000, True)
