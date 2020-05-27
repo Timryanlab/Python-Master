@@ -11,16 +11,20 @@ Created on Tue May  5 10:21:58 2020
 #%% Import Libraries
 from ryan_image_io import *
 from rolling_ball_subtraction import *
+from localization_kernels import *
 from numba import cuda
 from numba import vectorize, float64
 import numpy as np
+from scipy.special import erf
 import matplotlib.pyplot as plt
 import os
+import time
+import pandas as pd
 
 # Defintions for GPU codes to double precision
 EXP = 2.71828182845904523536028747135
 PI  = 3.14159265358979311599796346854
-
+LOCALIZE_LIMIT = 190*388*400
 #%% GPU Accelerated Code
 #%%
 """Begin GPU Code"""
@@ -141,6 +145,8 @@ def count_peaks(peak_image, blanking = 0, seperator = 190):
 
     """
     centers = np.argwhere(peak_image>0)
+    ind = np.argsort(centers[:,2])
+    
     mols = centers.shape[0]
     if blanking ==0:
         return centers
@@ -150,23 +156,30 @@ def count_peaks(peak_image, blanking = 0, seperator = 190):
         remover = []
         # Remove IDs in blank regions
         for i in range(mols): # We'll loop over the list of centers and remove
-            if ((centers[i,2] + shift) % 2 == 0 ) and (centers[i,1] < seperator): #Blanking the left frame  
+            if ((centers[ind[i],2] + shift) % 2 == 0 ) and (centers[ind[i],1] < seperator): #Blanking the left frame  
                 remover.append(i) # If ID should be abandoned add index to list
-            if ((centers[i,2] + shift) % 2 == 1 ) and (centers[i,1] >= seperator): #Blanking the right frame
+            if ((centers[ind[i],2] + shift) % 2 == 1 ) and (centers[ind[i],1] >= seperator): #Blanking the right frame
                 remover.append(i) # If ID should be abandoned add index to list
-        return np.delete(centers,remover,0) # Return list of centers sans background channel IDs
+        return np.delete(centers[ind,:],remover,0) # Return list of centers sans background channel IDs
 
-def localize_file(file):
-    """Localize file will do memory batch processing to prevent gpu overload
-        this allows localize_images to focus on optimizing dataflow and prioritize 
-        analysis speed
+
+    
+def cpu_localize_images(file_name):
     """
-    images = load_image_to_array(fpath + fname) # Load image into workspace
-    localize_images(images)
-    
-def localize_images(images):
-    
+    CPU version of MLE Asym. Gaussian fitting algorithm
+
+    Parameters
+    ----------
+    file_name : string
+        File path/name of image to localize.
+
+    Returns
+    -------
+    None.
+
+    """
     #Load Images
+    images = load_image_to_array(file_name) # Load image into workspace
     print('Image detected with m = {}, n = {}, and o = {}'.format(images.shape[0],images.shape[1],images.shape[2]))
     
     # Data Prep
@@ -194,18 +207,15 @@ def localize_images(images):
     # Image Segmentation
     # Accepts: images_no_background, centers, pixel_width
     # Returns: molecules = the hurricane based data structure
-    
+    psf_image_array = segment_image_into_psfs(images_no_background, centers, pixel_width)
     
     # Localization
     # Accept in an array where each row represents one localization
+    fits = fit_psf(psf, True)
     
     # Data Cleanup
     
     # Save relevant data
-
-def wavelet_denoise(image):
-    """Non-optimized """
-    pass
 
 def segment_image_into_psfs(image, centers, pixel_width):
     """
@@ -230,25 +240,52 @@ def segment_image_into_psfs(image, centers, pixel_width):
     psf_image_array = np.zeros((2*pixel_width + 1,2*pixel_width + 1,centers.shape[0]))
     
    #GPU Specification
-    if 2*pixel_width + 1 > 32:
+    if 2*pixel_width + 1 >= 32:
         blockdim = (32,32) #We can use a linearized array here
         griddim = ((2*pixel_width + 1) // blockdim[0] + 1,  centers.shape[0]) #Specify the block landscape
     else:
         values = np.array([32, 16, 8, 4, 2])
         block_size = values[np.argwhere(values < 2*pixel_width + 1)[0] - 1][0]
-        if block_size != 32:
-            D3_increase = int(1024/(block_size**2)) # block_size and 1024 have common factors so expect integer returns
-            blockdim = (block_size,block_size,D3_increase)
-            griddim = (1,1,centers.shape[0]//D3_increase + 1)
-            gpu_image_segment[griddim, blockdim](np.ascontiguousarray(image),np.ascontiguousarray(psf_image_array), np.ascontiguousarray(centers), np.ascontiguousarray(pixel_width))
-        else:
-            blockdim = (32,32)
-            griddim = (1,1,centers.shape[0])
-            gpu_image_segment[griddim, blockdim](np.ascontiguousarray(image),np.ascontiguousarray(psf_image_array), np.ascontiguousarray(centers), np.ascontiguousarray(pixel_width))            
+        D3_increase = int(1024/(block_size**2)) # block_size and 1024 have common factors so expect integer returns
+        blockdim = (block_size,block_size,D3_increase)
+        griddim = (1,1,centers.shape[0]//D3_increase + 1)
+    gpu_image_segment[griddim, blockdim](np.ascontiguousarray(image),np.ascontiguousarray(psf_image_array), np.ascontiguousarray(centers), np.ascontiguousarray(pixel_width))            
     #GPU Call
-    
-    
-    return psf_image_array
+
+def gpu_image_into_psfs(d_image_2, d_psf_array, d_centers, pixel_width):
+    """
+    Python wrapper for the cuda call to segment out images
+
+    Parameters
+    ----------
+    d_image_2 : cupy double array pointer
+        Background Subtracted data frames.
+    d_psf_array : cupy double array pointer
+        empty array to be populated by image segments.
+    d_centers : cupy int array pointer
+        List of [[row,col,frame],] that indicates central pixels for segmentation in d_image_2.
+    pixel_width : int
+        radius of segmented cut out, final segmentation is (2*pixel_width+1) x (2*pixel_width+1) in size.
+
+    Returns
+    -------
+    None.
+
+    """
+     #GPU Specification
+    if 2*pixel_width + 1 >= 32:
+        blockdim = (32,32) #We can use a linearized array here
+        griddim = ((2*pixel_width + 1) // blockdim[0] + 1,  centers.shape[0]) #Specify the block landscape
+    else:
+        values = np.array([32, 16, 8, 4, 2])
+        block_size = values[np.argwhere(values < 2*pixel_width + 1)[0] - 1][0]        
+        D3_increase = int(1024/(block_size**2)) # block_size and 1024 have common factors so expect integer returns
+        blockdim = (block_size,block_size,D3_increase)
+        griddim = (1,1,d_centers.shape[0]//D3_increase + 1)
+    d_pixel_width = cp.array(pixel_width)
+    gpu_image_segment[griddim, blockdim](d_image_2,d_psf_array, d_centers, d_pixel_width)
+    del d_pixel_width          
+
    
 def find_peaks(image, threshold = -1, pixel_width = 5):
     """ Non-optimized gpu peak finding wrapper"""
@@ -262,21 +299,34 @@ def find_peaks(image, threshold = -1, pixel_width = 5):
     gpu_peaks[griddim, blockdim](np.ascontiguousarray(image), np.ascontiguousarray(image2), np.ascontiguousarray(threshold), np.ascontiguousarray(pixel_width))
     return image2
 
-def erf(x, n=20):    
-    er = 0
-    for i in range(n):
-        er += (-1)**i*(x**(2*i))/((2*i+1)*factorial(i))
-    
-    return 2*x*er*PI**(-0.5)
+def gpu_find_peaks(d_image_2, d_image_3, threshold, pixel_width):
+    '''
+    Python Wrapper for GPU based peak finding algorithm
 
-def factorial(x):
-    c = 1
-    while x >1:
-        c= c*x
-        x-=1
-    return c
+    Parameters
+    ----------
+    d_image_2 : cupy double array
+        Image in which to search for peaks.
+    d_image_3 : cupy boolean array
+        Binary image to indicate central pixels of ROIs.
+    threshold : double
+        Pixel threshold limit to qualify an ROI.
+    pixel_width : int
+        radius of neighborhood to search, final neighborhood is (2*pixel_width+1) x (2*pixel_width+1) in size.
 
-def gauss_and_derivatives(psf, fit_vector):
+    Returns
+    -------
+    None.
+
+    '''
+    blockdim = (32,32) #Specify number of threads in a 2D grid
+    m,n,o = image_size(d_image_2)
+    griddim = (m// blockdim[0] + 1, n//blockdim[1] + 1,o) #Specify the block landscape
+    gpu_peaks[griddim, blockdim](d_image_2, d_image_3,np.ascontiguousarray(threshold), np.ascontiguousarray(pixel_width))
+
+
+
+def gauss_and_derivatives(psf, fit_vector, crlbs = False):
     """
     
 
@@ -363,9 +413,39 @@ def gauss_and_derivatives(psf, fit_vector):
                    - dsx/ddsx,
                    - dsy/ddsy,
                    - db/ddb]
-    
-    return corrections
+    if crlbs:
+        information_matrix = np.empty((6,6))
+        for i in range(6):
+            for j in range(6):
+                information_matrix[i,j] = np.sum(derivatives[i]*derivatives[j]/psf_guess)
+        
+        crlbs = np.empty(7)
+        if is_invertible(information_matrix):
+            information_inverse = np.linalg.inv(information_matrix)
+            for i in range(6):
+                crlbs[i] = information_inverse[i][i]
+            crlbs[6] = np.sum(psf*np.log(psf_guess/(psf+0.00000000001)) - (psf_guess + psf))
+        else: 
+            crlbs =[-1,-1,-1,-1,-1,-1,1]
+        return crlbs
+    else:
+        return corrections
+
 def fit_psf_array(psf_image_array):
+    """
+    Wrapper to handle an array of PSF images
+
+    Parameters
+    ----------
+    psf_image_array : numpy double array
+        array of PSF images to be fit w/ MLE approx.
+
+    Returns
+    -------
+    numpy double array
+        Array of fitting parameters.
+
+    """
     fits = []
     for i in range(psf_image_array.shape[2]):#loop over all molecules in array
         fits.append(fit_psf(psf_image_array[:,:,i]))
@@ -416,67 +496,218 @@ def fit_psf(psf, figures = False):
     
     return fit_vector
 
-def gpu_psf_array_fit(psf_image_array, rotation = 0, cycles = 10):
-    """
-    CPU side wrapper for a GPU segmentation of an image stack
+def remove_bad_fits(fitting_vector):
+    '''
+    
 
     Parameters
     ----------
-    images : numpy array [m,n,o]
-        Numpy Image array to be segmented.
-    centers : numpy array [N,3]
-        Array of N 3D locations of peaks to be segmented.
-    pixel_width : int
-        Radial width of segmentation. 
+    fitting_vector : numpy double array
+        A lit .
 
     Returns
     -------
-    psf_image_array : numpy array shape [N,(2*pixel_width + 1)^2]
-        Final image array for localization.
+    None.
+
+    '''
+    # remove NaNs
+    index = []
+    for i in range(fitting_vector.shape[0]):
+        if np.abs(fitting_vector[i,0]) < 5 and np.abs(fitting_vector[i,1]) < 5:
+            if np.abs(fitting_vector[i,3]) < 6 and np.abs(fitting_vector[i,4]) < 6:
+                if np.abs(fitting_vector[i,3]) > 0.6 and np.abs(fitting_vector[i,4]) > 0.6:
+                    index.append(i)
+    return index
+
+def is_invertible(a):
+    return a.shape[0] == a.shape[1] and np.linalg.matrix_rank(a) == a.shape[0]
+
+def get_error_values(psf_array, fitting_vector):
+    M = psf_array.shape[2]
+    crlb_vectors = np.empty((M,7))
+    for i in range(M):
+        crlb_vectors[i,:] = gauss_and_derivatives(psf_array[:,:,i], fitting_vector[i,:], crlbs = True)
+    return crlb_vectors
+
+def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, start = 0, finish = 0):
+    images = load_image_to_array(file_name, start, finish)
+    m,n,o = image_size(images)
+    pixels = m*n*o
+    if pixels <= LOCALIZE_LIMIT:
+        # run the localization in one chunk
+        fits, crlbs, frames  = localization_data = localize_image_slices(images, 
+                                                  pixel_size,
+                                                  gauss_sigma,
+                                                  rolling_ball_radius,
+                                                  rolling_ball_height,
+                                                  pixel_width, 
+                                                  blanking,
+                                                  threshold, 
+                                                  start)
+        frames += start
+    else:
+        rounds = pixels // LOCALIZE_LIMIT + 1# Divide into manageable sizes
+        chunk = o // (rounds)   # Determine dividing chunk size of stacks
+        for i in range(rounds+1): # Loop over number of times needed to chunk through data set
+            # Ensure we don't go over our stack size
+            stride = np.min((o,(i+1)*chunk)) 
+            #Parse the image into a subset
+            sub_images = images[:,:,i*chunk:stride]
+            slice_fits, slice_crlbs, slice_frames  = localize_image_slices(sub_images, 
+                                                                           pixel_size,
+                                                                           gauss_sigma,
+                                                                           rolling_ball_radius,
+                                                                           rolling_ball_height,
+                                                                           pixel_width, 
+                                                                           threshold)
+            if i == 0:
+                fits = slice_fits
+                crlbs = slice_crlbs
+                frames = slice_frames
+            else:
+                fits = np.concatenate((fits,slice_fits))
+                crlbs = np.concatenate((crlbs,slice_crlbs))
+                frames = np.concatenate((frames,slice_frames+start))
+
+    localization_data = Localizations(fits, crlbs, frames, pixel_size)
+    return localization_data
+    
+def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35):
+    """
+    Will use MLE localization algorithm to analyze images such that maximum uptime
+    is kept on the gpu
+
+    Parameters
+    ----------
+    file_name : Str
+        Name of image file to localize.
+
+    Returns
+    -------
+    None.
 
     """
-    # Variable preallocation
-    m,n,o = image_size(psf_image_array)
-    fit_vectors = np.zeros((o,6))
-    cr_lower_bounds = np.zeros((o,7))
-    x_build = np.linspace(-pixel_width,
-                          pixel_width,
-                          2*pixel_width +1)
+
+    m,n,o = image_size(image_slice)    
+    kernel = make_gaussian_kernel(gauss_sigma) #Make normalized gaussian kernel
+    # Make a grayscale 'ball'
+    sphere_kernel = make_a_sphere(radius = rolling_ball_radius, 
+                                  height = rolling_ball_height) 
+
+    # Allocate Device Arrays 
+    # Note that we will not have host side image arrays
+    d_image_2 = cuda.device_array_like(image_slice)
+    d_image_3 = cuda.device_array_like(image_slice) # We require 3 image arrays for analysis
+
     
-    x, y = np.meshgrid(x_build, x_build)
-    X = x*np.cos(rotation) - y*np.sin(rotation)
-    Y = x*np.sin(rotation) + y*np.cos(rotation)
-    grid = [X,Y]
+    # Copy data over 
+    d_images = send_to_device(image_slice)
+    d_kernel = send_to_device(kernel)
+    d_sphere_kernel = send_to_device(sphere_kernel)
     
-   #GPU Specification
- 
-    blockdim = (1024)
-    griddim = (o)
-    gpu_fit_psf_array[griddim, blockdim](np.ascontiguousarray(psf_image_array), 
-                                         np.ascontiguousarray(fit_vectors), 
-                                         np.ascontiguousarray(cr_lower_bounds), 
-                                         np.ascontiguousarray(grid),
-                                         np.ascontiguousarray(cycles))            
-    #GPU Call  
-    return fit_vectors, cr_lower_bounds
+    #GPU Call for the rolling_ball_subtraction
+    gpu_rolling_ball(d_images, d_image_2, d_image_3, d_kernel, d_sphere_kernel)
     
-#%% Localization Class    
+    # background subtracted image is on d_image_2
+    # original image is on d_images and background is on d_image_3
+    del d_image_3
+    d_image_3 = cp.empty((m,n,o),dtype = cp.bool)
+    gpu_find_peaks(d_image_2, d_image_3, threshold, pixel_width)
+    
+    # Copy peak data back onto host
+    peaks = cp.asnumpy(d_image_3)
+    
+    # Clean up GPU memory
+    del d_image_3, d_images, d_kernel, d_sphere_kernel
+    
+    # Start peak finding analysis
+    centers = count_peaks(peaks, blanking)
+    hot_pixels = centers.shape[0] # number of areas found to localize
+    # Set up device memory for next round of computation
+    d_centers = send_to_device(centers)
+    d_psfs = cp.empty((2*pixel_width+1, 2*pixel_width +1,centers.shape[0]))
+    d_fitting_vectors = cp.empty((centers.shape[0],6))
+    
+    # Segment Image
+    gpu_image_into_psfs(d_image_2, d_psfs, d_centers, pixel_width)
+    del d_centers
+    del d_image_2
+    
+    # Perform Fit
+    fitting_kernel((1024,),( hot_pixels//1024 + 1,),(d_psfs, d_fitting_vectors, 0, hot_pixels, 20))
+    
+    # Copy data back onto CPU
+    psfs = cp.asnumpy(d_psfs)
+    fitted_vectors = cp.asnumpy(d_fitting_vectors)
+    
+    # Clean up GPU memory
+    del d_psfs
+    del d_fitting_vectors
+    # Adjust for global context
+    list_of_good_fits = remove_bad_fits(fitted_vectors)
+    fitted_vectors[:,0] += centers[:,1]
+    fitted_vectors[:,1] += centers[:,0]
+    frames = centers[list_of_good_fits,2]
+    keep_vectors = fitted_vectors[list_of_good_fits,:]
+    keep_psfs = psfs[:,:,list_of_good_fits]
+    # At this point fitting_vectors should contain coordinates of all fitted localizations in the dataset
+    
+    crlb_vectors = get_error_values(keep_psfs, keep_vectors) # perform a single run through of MLE to compute error values
+    
+    return keep_vectors, crlb_vectors, frames
+    
+#%% Localization Class
+class Localizations:
+    def __init__(self, fitting_vectors, crlb_vectors, frames, pixel_size = 0.13):
+        self.xf = pixel_size*(fitting_vectors[:,0])
+        self.yf = pixel_size*(fitting_vectors[:,1])
+        self.N = fitting_vectors[:,2]
+        self.sx = pixel_size*fitting_vectors[:,3]
+        self.sy = pixel_size*fitting_vectors[:,4]
+        self.o = fitting_vectors[:,5]
+        self.frames = frames
+        
+        self.xf_error = pixel_size*crlb_vectors[:,0]**0.5
+        self.yf_error = pixel_size*crlb_vectors[:,1]**0.5
+        self.sx_error = pixel_size*crlb_vectors[:,3]**0.5
+        self.sy_error = pixel_size*crlb_vectors[:,4]**0.5
+        
+    def scatter(self):
+        plt.scatter(self.xf, self.yf)
+        plt.show()
+        
+        
+        
 #%% Main Workspace
 if __name__ == '__main__':
     fpath = "D:\\Dropbox\\Data\\3-3-20 glut4-vglutmeos\\" # Folder
     fname = "cell10_dz20_r2.tif" # File name
-    #%% Load Image
-    im = load_image_to_array(fpath + fname,  20) # Load image into workspace
-    print(im.shape) # Print shape
     
-    #%% Subtract Background using rolling ball subtraction
-    print('Subtracting Background')
-    gauss_sigma = 2.5
-    rolling_ball_radius = 6
-    rolling_ball_height = 6
-    pixel_width = 5
-    blanking = 2
-    threshold = 35
+    file_name = fpath + fname
+    
+    result =  localize_image_stack(file_name, 
+                                             pixel_size = 0.130, 
+                                             gauss_sigma = 2.5, 
+                                             rolling_ball_radius = 6, 
+                                             rolling_ball_height = 6, 
+                                             pixel_width = 5, 
+                                             blanking = 2, 
+                                             threshold = 35)
+    
+    '''
+    psfs, truths = simulate_psf_array(1000)
+    fits =  fit_psf_array(psfs)
+    centers = np.zeros((truths.shape[0],3))
+    #%%
+    list_of_good_fits = remove_bad_fits(fits,centers, truths)
+    results = truths[list_of_good_fits,:] - fits[list_of_good_fits,:]
+    results[:,2] /= truths[list_of_good_fits,2]
+    
+    errors = get_error_values(psfs, fits)
+    '''
+                                        
+    #%% The code below is an example of localizing the data
+    '''
     images_no_background, background_images = rolling_ball_subtraction(im,  gauss_sigma, rolling_ball_radius, rolling_ball_height)
     print('Background Subtracted')
     del im # No reason to keep too much memory
@@ -513,7 +744,7 @@ if __name__ == '__main__':
     print("The width was {} pixels in 'x', and {} pixels in 'y', background = {}. ".format(np.round(fits[3],3),np.round(fits[4],3),np.round(fits[5],3)))
     show_as_image(psf)    
     # Save relevant data
-    fits = fit_psf_array(psf_image_array)
+    #fits = fit_psf_array(psf_image_array)
     #%% GPU Fitting Section
-    #fit_gpu, crlbs = gpu_psf_array_fit(psf_image_array)
-    
+    fit_gpu = fit_psf_array_on_gpu(psf_image_array, 0 , 20)
+    '''

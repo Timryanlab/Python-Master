@@ -13,8 +13,11 @@ from Hurricane import *
 import cupy as cp
 import matplotlib.pyplot as plt
 from scipy.special import erf
+import time
+import warnings
 #%% Functions
 
+warnings.filterwarnings("ignore")
 '''
 Notes on this function
 Indexing is weird because of how I index in python. Lesson learned but sticking with my convention for now. 
@@ -132,9 +135,7 @@ extern "C"
 } // Finish Kernel
 ''', 'fitting_kernel')
 
-def gpu_psf_fit(images):
-    m,n,o = image_size(images)
-    fits = cp.empty((o,6))
+
         
 def simulate_psf_array(N = 100, pix = 5):
     psf_image_array = np.zeros((2*pix+1,2*pix+1,N))
@@ -159,7 +160,7 @@ def simulate_psf_array(N = 100, pix = 5):
 
 def display_results(gpu_results):
     starting_with = gpu_results.shape[0]
-    gpu_results = gpu_results[~np.isnan(gpu_results[:,0]),:]
+    #gpu_results = gpu_results[~np.isnan(gpu_results[:,0]),:]
     print('Recovered {}% of localization'.format(np.round(100*gpu_results.shape[0]/starting_with,2)))
     x_bins = np.linspace(-0.2,0.2,100)
     plt.hist(gpu_results[:,0], bins= x_bins, alpha = 0.5, label='x-difference')
@@ -189,21 +190,81 @@ def display_results(gpu_results):
     plt.show()
     
 def test_gpu_fit(N = 100, show = False):
+    t = time.clock()
     psfs, truths = simulate_psf_array(N)
-    print('Simulated')
-    gpu_fits = cp.empty_like(cp.asarray(truths))
-    gpu_psf = cp.asarray(psfs)
-    if N <1024:
-        fitting_kernel((N,),(1,),(gpu_psf,gpu_fits, 0, gpu_psf.shape[2], 20))
-    else:
-        fitting_kernel((1024,),( N//1024 + 1,),(gpu_psf,gpu_fits, 0, gpu_psf.shape[2], 20))
-    gpu_differences = truths - cp.asnumpy(gpu_fits)
+    te = time.clock() - t
+    print('Simulated took {} s'.format(te))
+
+    gpu_fits = fit_psf_array_on_gpu(psfs)
+    #gpu_differences = truths - cp.asnumpy(gpu_fits)
+    gpu_differences = truths - gpu_fits
     gpu_results = gpu_differences
     gpu_results[:,2] /= truths[:,2]
     if show: 
         display_results(gpu_results)
+    print('Final Timing: it took {}s to run all of this'.format(time.clock()-t))
     return gpu_results, truths
 
+
+def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
+    
+    N = psf_array.shape[2] # Get number of images to localize
+    fits = np.empty((N,6)) # Allocate fits array
+    if N <= 2*10**5: # If less than 100k, localize together
+        t0 = time.clock()
+        gpu_fits = cp.empty_like(cp.asarray(fits))
+        gpu_psf = cp.asarray(psf_array)
+        t_load = time.clock()
+        if N <1024: # Broadcasting rules
+            fitting_kernel((N,),(1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+        else:
+            fitting_kernel((1024,),( N//1024 + 1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+        t_fit = time.clock()
+        cpu_fits = cp.asnumpy(gpu_fits)
+        t_return = time.clock()
+        
+        print(' Localized {} molecules'.format(N))
+        print('Timings: Loading onto the GPU took {}s'.format(t_load - t0))
+        print('Timings: Fitting  on  the GPU took {}s'.format(t_fit - t_load))
+        print('Timings: Loading  off the GPU took {}s'.format(t_return - t_fit))
+        
+        return cpu_fits
+    else: # more than 100k divide up the array
+        rounds = int(np.ceil(float(N) / (2*10**5))) # This will be the number of rounds required to analyze the array
+        # We'll divide the rounds via 100k chunks to maximize computation speed
+        times = np.empty((rounds,4))
+        for i in range(rounds):
+            start = i*2*10**5
+            end = np.min([(i+1)*2*10**5,N])
+            print('Localizing Molecules {} through {}'.format(start, end))
+            times[i,0]= time.clock()
+            gpu_fits = cp.empty_like(cp.asarray(fits[start:end,:]))
+            gpu_psf = cp.asarray(psf_array[:,:,start:end])
+            times[i,1] = time.clock()
+            if (end-start) <1024: # Broadcasting rules
+                fitting_kernel(((end-start),),(1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+            else:
+                fitting_kernel((1024,),( (end-start)//1024 + 1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+            times[i,2] = time.clock()
+            fits[start:end,:] = cp.asnumpy(gpu_fits)
+            times[i,3] = time.clock()
+        
+        print(' Localization of 200k molecules'.format(N))
+        loads = times[:,1] - times[:,0]
+        fiters = times[:,2] - times[:,1]
+        returns = times[:,3] - times[:,2]
+        
+        loads = loads[~np.isnan(loads)]
+        fiters = fiters[~np.isnan(fiters)]
+        returns = returns[~np.isnan(returns)]
+        
+        print('Timings: Loading onto the GPU took {} +/- {}s'.format(loads.mean(), loads.std()/len(loads)**0.5))
+        print('Timings: Fitting  on  the GPU took {} +/- {}s'.format(fiters.mean(), fiters.std()/len(fiters)**0.5))
+        print('Timings: Loading  off the GPU took {} +/- {}s'.format(returns.mean(), fits.std()/len(returns)**0.5))
+        return fits
+    
 #%% Main Workspace
 if __name__ == '__main__':
-    results, truths = test_gpu_fit(10000, True)
+    results, truths = test_gpu_fit(600000, True)
+
+

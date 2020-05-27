@@ -7,7 +7,6 @@ Andrew Nelson
 """
 #%% Import Section
 from numba import cuda
-from numba import vectorize, float64
 import numpy as np
 import matplotlib.pyplot as plt
 import os
