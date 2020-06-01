@@ -18,12 +18,15 @@ import numpy as np
 from scipy.special import erf
 import matplotlib.pyplot as plt
 import os
+from localizations_class import *
 import time
 import pandas as pd
 
 # Defintions for GPU codes to double precision
 EXP = 2.71828182845904523536028747135
 PI  = 3.14159265358979311599796346854
+
+
 LOCALIZE_LIMIT = 190*388*400
 #%% GPU Accelerated Code
 #%%
@@ -513,10 +516,15 @@ def remove_bad_fits(fitting_vector):
     # remove NaNs
     index = []
     for i in range(fitting_vector.shape[0]):
-        if np.abs(fitting_vector[i,0]) < 5 and np.abs(fitting_vector[i,1]) < 5:
-            if np.abs(fitting_vector[i,3]) < 6 and np.abs(fitting_vector[i,4]) < 6:
-                if np.abs(fitting_vector[i,3]) > 0.6 and np.abs(fitting_vector[i,4]) > 0.6:
-                    index.append(i)
+        if ~np.isnan(fitting_vector[i,0]):
+            if np.abs(fitting_vector[i,0]) < 5 and np.abs(fitting_vector[i,1]) < 5:
+                if np.abs(fitting_vector[i,3]) < 6 and np.abs(fitting_vector[i,4]) < 6:
+
+                    if np.abs(fitting_vector[i,3]) > 0.6 and np.abs(fitting_vector[i,4]) > 0.6:
+                        if fitting_vector[i,2] > 100 and fitting_vector[i,2] < 100000:
+                            if fitting_vector[i,5] > -10 and fitting_vector[i,5] < 100:
+
+                                index.append(i)
     return index
 
 def is_invertible(a):
@@ -529,21 +537,24 @@ def get_error_values(psf_array, fitting_vector):
         crlb_vectors[i,:] = gauss_and_derivatives(psf_array[:,:,i], fitting_vector[i,:], crlbs = True)
     return crlb_vectors
 
-def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, start = 0, finish = 0):
+def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, start = 0, finish = 0, angs = [0,0]):
     images = load_image_to_array(file_name, start, finish)
     m,n,o = image_size(images)
     pixels = m*n*o
+    molecules = Localizations()
+    angs = [molecules.red_angle, molecules.orange_angle]
     if pixels <= LOCALIZE_LIMIT:
         # run the localization in one chunk
-        fits, crlbs, frames  = localization_data = localize_image_slices(images, 
+        fits, crlbs, frames  =localize_image_slices(images, 
                                                   pixel_size,
                                                   gauss_sigma,
                                                   rolling_ball_radius,
                                                   rolling_ball_height,
                                                   pixel_width, 
                                                   blanking,
-                                                  threshold, 
-                                                  start)
+                                                  threshold,
+                                                  molecules.split,
+                                                  angs)
         frames += start
     else:
         rounds = pixels // LOCALIZE_LIMIT + 1# Divide into manageable sizes
@@ -559,7 +570,9 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
                                                                            rolling_ball_radius,
                                                                            rolling_ball_height,
                                                                            pixel_width, 
-                                                                           threshold)
+                                                                           threshold,
+                                                                           molecules.split,
+                                                                           angs)
             if i == 0:
                 fits = slice_fits
                 crlbs = slice_crlbs
@@ -569,10 +582,11 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
                 crlbs = np.concatenate((crlbs,slice_crlbs))
                 frames = np.concatenate((frames,slice_frames+start))
 
-    localization_data = Localizations(fits, crlbs, frames, pixel_size)
-    return localization_data
     
-def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35):
+    molecules.store_fits(fits, crlbs, frames)
+    return molecules
+    
+def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, split = 0, angs = [0,0]):
     """
     Will use MLE localization algorithm to analyze images such that maximum uptime
     is kept on the gpu
@@ -624,6 +638,9 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     centers = count_peaks(peaks, blanking)
     hot_pixels = centers.shape[0] # number of areas found to localize
     # Set up device memory for next round of computation
+    
+    d_rotation = cp.array([angs[np.int8(centers[i,1] <= split)] for i in range(hot_pixels)])# determine the 'color' of the molecule based on it's initial location
+    #print([angs[centers[i,1] <= split] for i in range(hot_pixels)])
     d_centers = send_to_device(centers)
     d_psfs = cp.empty((2*pixel_width+1, 2*pixel_width +1,centers.shape[0]))
     d_fitting_vectors = cp.empty((centers.shape[0],6))
@@ -634,7 +651,7 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     del d_image_2
     
     # Perform Fit
-    fitting_kernel((1024,),( hot_pixels//1024 + 1,),(d_psfs, d_fitting_vectors, 0, hot_pixels, 20))
+    fitting_kernel((1024,),( hot_pixels//1024 + 1,),(d_psfs, d_fitting_vectors, d_rotation, hot_pixels, 20))
     
     # Copy data back onto CPU
     psfs = cp.asnumpy(d_psfs)
@@ -656,27 +673,6 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     
     return keep_vectors, crlb_vectors, frames
     
-#%% Localization Class
-class Localizations:
-    def __init__(self, fitting_vectors, crlb_vectors, frames, pixel_size = 0.13):
-        self.xf = pixel_size*(fitting_vectors[:,0])
-        self.yf = pixel_size*(fitting_vectors[:,1])
-        self.N = fitting_vectors[:,2]
-        self.sx = pixel_size*fitting_vectors[:,3]
-        self.sy = pixel_size*fitting_vectors[:,4]
-        self.o = fitting_vectors[:,5]
-        self.frames = frames
-        
-        self.xf_error = pixel_size*crlb_vectors[:,0]**0.5
-        self.yf_error = pixel_size*crlb_vectors[:,1]**0.5
-        self.sx_error = pixel_size*crlb_vectors[:,3]**0.5
-        self.sy_error = pixel_size*crlb_vectors[:,4]**0.5
-        
-    def scatter(self):
-        plt.scatter(self.xf, self.yf)
-        plt.show()
-        
-        
         
 #%% Main Workspace
 if __name__ == '__main__':
@@ -686,14 +682,17 @@ if __name__ == '__main__':
     file_name = fpath + fname
     
     result =  localize_image_stack(file_name, 
-                                             pixel_size = 0.130, 
-                                             gauss_sigma = 2.5, 
-                                             rolling_ball_radius = 6, 
-                                             rolling_ball_height = 6, 
-                                             pixel_width = 5, 
-                                             blanking = 2, 
-                                             threshold = 35)
-    
+                                    pixel_size = 0.130, 
+                                    gauss_sigma = 2.5, 
+                                    rolling_ball_radius = 6, 
+                                    rolling_ball_height = 6, 
+                                    pixel_width = 5, 
+                                    blanking = 2, 
+                                    threshold = 35,
+                                    start = 0,
+                                    finish = 0)
+    result.show_localizations()
+    result.show_axial_sigma_curve()
     '''
     psfs, truths = simulate_psf_array(1000)
     fits =  fit_psf_array(psfs)

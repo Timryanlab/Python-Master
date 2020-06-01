@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from scipy.special import erf
 import time
 import warnings
+
 #%% Functions
 
 warnings.filterwarnings("ignore")
@@ -29,13 +30,13 @@ row = frame + number_of_frames*column + row*number_of_frames*number_of_columns
 
 fitting_kernel = cp.RawKernel(r'''
 extern "C" 
- __global__ void fitting_kernel(const double* psf_array, double* fit_array, double ang, int images, int cycles) {
+ __global__ void fitting_kernel(const double* psf_array, double* fit_array, double* ang_array, int images, int cycles) {
     const int pix = 11; // pixel size
 	__shared__ double xgrid[pix*pix];			// allocate xpix and ypix variables to the shared memory of the blocks
 	__shared__ double ygrid[pix*pix];			// this will reduce calls to global device memory if we didn't need rotation we could reduce the variables needed for calculation
     int tx = threadIdx.x;
     int index = blockDim.x * blockIdx.x + threadIdx.x;
-
+    double ang = ang_array[index];
 	if (tx == 0){ // create xgrid and ygrid we want to create the grid regardless of whether the index is crunching on an image
 		for (int i = 0; i <pix; i++){
 			for(int j = 0; j <pix; j++){
@@ -126,10 +127,13 @@ extern "C"
                 
                 } // Finish Column loop
             } // Finish Row Loop
-            
             for(int i = 0; i<6; i++){fits[i] -= d_1[i]/d_2[i];} // make the corrections
         } // Finish Fitting Cycle Loop
         // assign final fitting parameters to output vector
+        float x = fits[0]*cos(-ang) - fits[1]*sin(-ang);
+        float y = fits[0]*sin(-ang) - fits[1]*cos(-ang);
+        fits[0] = x;
+        fits[1] = y;
         for(int i= 0; i < 6; i++){fit_array[i+ index*6] = fits[i];}
     } // Finish PSF calculation
 } // Finish Kernel
@@ -137,26 +141,7 @@ extern "C"
 
 
         
-def simulate_psf_array(N = 100, pix = 5):
-    psf_image_array = np.zeros((2*pix+1,2*pix+1,N))
-    x_build = np.linspace(-pix,pix,2*pix +1)
-    X , Y = np.meshgrid(x_build, x_build)
-    truths = np.zeros((N,6))
-    
-    for i in range(N):
-        # Start by Determining your truths
-        truths[i,0] = np.random.uniform(-0.5, 0.5)
-        truths[i,1] = np.random.uniform(-0.5, 0.5)
-        truths[i,2] = np.random.uniform(1000, 3000)
-        truths[i,3] = np.random.uniform(1.0, 2)
-        truths[i,4] = np.random.uniform(1.0, 2)
-        truths[i,5] = np.random.uniform(1, 3)
-        
-        x_gauss = 0.5 * (erf( (X - truths[i,0] + 0.5) / (np.sqrt(2 * truths[i,3]**2))) - erf( (X - truths[i,0] - 0.5) / (np.sqrt(2 * truths[i,3]**2))))
-        y_gauss = 0.5 * (erf( (Y - truths[i,1] + 0.5) / (np.sqrt(2 * truths[i,4]**2))) - erf( (Y - truths[i,1] - 0.5) / (np.sqrt(2 * truths[i,4]**2))))
-        #print(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
-        psf_image_array[:,:,i] = np.random.poisson(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
-    return psf_image_array, truths
+
 
 def display_results(gpu_results):
     starting_with = gpu_results.shape[0]
