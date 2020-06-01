@@ -30,7 +30,7 @@ def send_command(ser,cmd,var = None): # Switch Statement
         func(ser,var)
     else:
         func(ser)
-
+    time.sleep(0.01)
     string = ser.readline()
     return string[0:-1]
     

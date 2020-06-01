@@ -6,6 +6,7 @@ import serial
 import time
 import pyasi
 import csv
+from datetime import datetime
 
 class myGui:
     def __init__(self, master, ser_stage, ser_arduino, bugable):
@@ -29,9 +30,11 @@ class myGui:
             self.com_frame.grid(row = 2, column = 1, columnspan = 2, padx = 2, pady = 2)
             self.storm_wave_frame.grid(row = 2, column = 0)
             self.build_channel_calibration()
-            self.build_dual_camera()
-            self.dual_camera_frame.grid(row = 2, column = 0)
+            #self.build_dual_camera()
+            #self.dual_camera_frame.grid(row = 2, column = 0)
             self.cal_frame.grid(row=3)
+            self.zx=0
+            self.zy=0
         if self.debug_state == 2: # SYN-ATP scope Config
             print('NO')
         if self.debug_state == 3: # The Bear scope Config
@@ -90,19 +93,25 @@ class myGui:
         self.cal_steps_y.set('10')
         self.cal_dx.set('0.1')
         self.cal_dy.set('0.1')
+        self.tdel = tk.StringVar()
+        self.tdel.set('0.2')
+        self.tex = tk.StringVar()
+        self.tex.set('0.05')
+        self.tdel_entry = tk.Entry(self.cal_frame, textvariable = self.tdel, width =5)
+        self.tex_entry = tk.Entry(self.cal_frame, textvariable = self.tex, width =5)
+        self.z_correct_button = tk.Button(self.cal_frame, text = 'Z Correct', command = self.fix_z)
         self.cal_x_entry = tk.Entry(self.cal_frame, textvariable= self.cal_steps_x, width =5)
         self.cal_y_entry = tk.Entry(self.cal_frame, textvariable= self.cal_steps_y, width =5)
         self.cal_dx_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dx, width =5)
         self.cal_dy_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dy, width =5)
-        self.cal_percentage = tk.StringVar()
-        self.cal_percentage.set('0%')
-        self.cal_status = tk.Label(self.cal_frame, textvariable = self.cal_percentage)
         self.cal_title = tk.Label(self.cal_frame, text = 'Raster Scan')
         self.cal_x_label = tk.Label(self.cal_frame,text = ' x steps @ ')
         self.cal_y_label = tk.Label(self.cal_frame,text = ' y steps @ ')
         self.cal_x_unit = tk.Label(self.cal_frame, text = ' um spacing')
         self.cal_y_unit = tk.Label(self.cal_frame, text = ' um spacing')
-        
+        self.tdel_unit = tk.Label(self.cal_frame, text = 's Delay')
+        self.tex_unit = tk.Label(self.cal_frame, text = 's Exposure')
+        self.dump_button = tk.Button(self.cal_frame, text ='DUMP', command = self.dump_stage)
         # Gridding
         self.cal_x_entry.grid(row=1, column = 0)
         self.cal_x_label.grid(row=1, column = 1)
@@ -114,7 +123,13 @@ class myGui:
         self.cal_dy_entry.grid(row=2, column=2)
         self.cal_y_unit.grid(row=2, column=3)
         self.channel_button.grid(row=1, column = 4, rowspan = 2)
-        self.cal_status.grid(row=1, column =5, rowspan =2)
+        self.z_correct_button.grid(row=1, column =5, rowspan =2)
+
+        self.tdel_entry.grid(row = 3, column = 0)
+        self.tex_entry.grid(row = 4, column = 0)
+        self.tdel_unit.grid(row = 3, column =1)
+        self.tex_unit.grid(row = 4, column =1)
+        self.dump_button.grid(row = 3, column = 2)
 
     def build_com_box(self):
         # Communication Box
@@ -208,7 +223,7 @@ class myGui:
         self.wave_title = tk.Label(self.storm_wave_frame, text = 'Storm Wave')
         self.wave_dz = tk.StringVar()
         self.wave_range = tk.StringVar()
-        self.wave_dz.set('10')
+        self.wave_dz.set('20')
         self.wave_range.set('1')
         self.uv_state = 0
         self.wave_dz_title = tk.Label(self.storm_wave_frame, text = 'dz')
@@ -231,31 +246,43 @@ class myGui:
         self.uv_laser_button.grid(row=3, column = 0)
  
     def channel_calibration(self):
-        sign = ''
+        sign = 1
+        strng = 'B X=0 Y=0\r'
+        pyasi.send_command(self.ser_s, strng)
+        strng = 'KP X=100 Y=100\r'
+        time.sleep(0.05)
+        pyasi.send_command(self.ser_s, strng)
+        strng = 'KI X=5 Y=5\r'
+        time.sleep(0.02)
+        pyasi.send_command(self.ser_s, strng)
+        time.sleep(0.02)
+        tdel = float(self.tdel.get())
+        tex = float(self.tex.get())
         ysteps = int(self.cal_steps_y.get())
         xsteps = int(self.cal_steps_x.get())
         dx = 10*float(self.cal_dx.get())
         dy = 10*float(self.cal_dy.get())
         for y in range(ysteps):
-            time.sleep(0.05)
+            time.sleep(tex)
             for x in range(xsteps):
-                stng = 'R X='+ sign + str(dx) +'\r'
+                #stng = 'R X='+ str(sign*dx) +' Z='+ str(sign*self.zx) + '\r'
+                stng = 'R X='+ str(sign*dx) +'\r'
+                #print(stng)
                 pyasi.send_command(self.ser_s,stng)
-                time.sleep(0.1)
+                time.sleep(tdel)
                 ac.send_command(self.ser_arduino,'t')
-                time.sleep(0.05)
-            per = 100*float(y)/float(ysteps)
-            self.cal_percentage.set(str(per)+'%')    
+                time.sleep(tex)
+            #pyasi.send_command(self.ser_s,'R Y='+str(dy)+' Z=' + str(self.zy) + '\r')
             pyasi.send_command(self.ser_s,'R Y='+str(dy)+'\r')
-            time.sleep(0.1)
+            #print('R Y='+str(dy)+' Z=' + str(self.zy) + '\r')
+            print(str(100*(1+y)/ysteps))
+            time.sleep(tdel)
             ac.send_command(self.ser_arduino,'t')
-            if y%2 is 1:
-                sign = ''
-            else:
-                sign ='-'
-        time.sleep(0.05)
-        strng = 'R Y='+str(-dy*(1+ysteps))+'\r'
-        print(strng)
+            sign = -1*sign
+        time.sleep(tex)
+        self.stage_reset
+        strng = 'R X='+ str(sign*xsteps*dx*(1-y%2)) +' Y='+str(-dy*(ysteps))+' Z ='+str(-self.zy*ysteps)+'\r'
+        #print(strng)
         pyasi.send_command(self.ser_s, strng)
 
     def camera_frame_setup(self):
@@ -348,6 +375,18 @@ class myGui:
             self.camera.set(string[0:-1])
         self.arduino.after(5,self.check_camera)
 
+    def clear_arduino(self):
+        self.ser_arduino.reset_input_buffer()
+        self.ser_arduino.reset_output_buffer()
+
+    def clear_both(self):
+        self.clear_arduino
+        self.clear_stage
+
+    def clear_stage(self):
+        self.ser_s.reset_input_buffer()
+        self.ser_s.reset_output_buffer()
+
     def clear_mark(self):
         ind = int(self.last_pos.get())
         del self.marks[ind]
@@ -355,6 +394,14 @@ class myGui:
         self.mark_num = self.mark_num - 1
         self.mark_text.set('Out of {} marks'.format(self.mark_num))
         self.write_marks()
+
+    def dump_stage(self):
+        stng = pyasi.send_command(self.ser_s,'DU\r')
+        f = open('dump.txt', 'w+')
+        now = datetime.now()
+        f.write(str(now) + ':\r'+ stng.decode())
+        f.close()
+
 
     def dwn_focus(self):
         pyasi.send_command(self.ser_s,'r z=-{}\r'.format(self.focus_amount.get()))
@@ -367,6 +414,26 @@ class myGui:
         else:
             self.external_trigger_button.configure(bg = 'magenta')
     
+    def fix_z(self): 
+        ysteps = int(self.cal_steps_y.get())
+        xsteps = int(self.cal_steps_x.get())
+        dx = 10*float(self.cal_dx.get())
+        dy = 10*float(self.cal_dy.get())
+        z0 = float(self.z.get())
+        strng = 'R X=' + str(xsteps*dx) + '\r'
+        pyasi.send_command(self.ser_s, strng)
+        time.sleep(5)
+        [x,y,z] = pyasi.get_positions(self.ser_s)
+        zx = float(z)
+        self.zx = (zx-z0)/(xsteps*dx)
+        strng = 'R Y=' + str(ysteps*dy) + '\r'
+        pyasi.send_command(self.ser_s, strng)
+        time.sleep(5)
+        [x,y,z] = pyasi.get_positions(self.ser_s)
+        zy = float(z)
+        self.zy = (zy-zx)/(ysteps*dy)
+        strng = 'R X=' + str(-xsteps*dx) +'Y=' + str(-ysteps*dy) + '\r'
+
     def invert(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"i"))
         self.inver_tog = (self.inver_tog + 1)%2
@@ -415,7 +482,7 @@ class myGui:
 
     def send_asi_command(self):
         self.response.set(pyasi.send_command(self.ser_s,self.cmd.get() + '\r'))
-        print(self.response.get())
+        #print(self.response.get())
       
     def setup_arduino(self, ser):
         flag = 1
