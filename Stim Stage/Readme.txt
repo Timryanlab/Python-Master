@@ -1,0 +1,2 @@
+Batch file needs to be updated. Copy the path of the folder containing "stim_stage.py" into the batch file using Notepad
+From there you can create a shortcut for the batch file allowing 'double click' access to the gui.

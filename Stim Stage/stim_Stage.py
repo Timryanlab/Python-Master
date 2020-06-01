@@ -1,5 +1,7 @@
 # This gui is to unify the stage controls with the arduino stimulation controls
 # Stim_Stage 1.1
+# This is the basic GUI with support for Andrew's scope
+# There are place holders for scope specialization
 import tkinter as tk
 import ardcom as ac
 import serial
