@@ -49,7 +49,8 @@ def simulate_psf_array(N = 100, pix = 5):
 
 #%% Localization Class
 class Localizations:
-    def __init__(self, pixel_size = 0.13):
+    def __init__(self, filename, pixel_size = 0.13):
+        self.
         self.xf = np.array([])
         self.yf = np.array([])
         self.zf = np.array([])
@@ -108,6 +109,7 @@ class Localizations:
         self.color = self.xf <= self.split*self.pixel_size  # given the 2 color system we can use a boolean variable to relay color info
                                        # False = Red channel True = Orange Channel
         self.get_z_from_widths()
+        self.make_z_corrections()
         self.xf_error = self.pixel_size*crlb_vectors[:,0]**0.5
         self.yf_error = self.pixel_size*crlb_vectors[:,1]**0.5
         self.sx_error = self.pixel_size*crlb_vectors[:,3]**0.5

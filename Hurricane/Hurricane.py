@@ -542,7 +542,7 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
     m,n,o = image_size(images)
     pixels = m*n*o
     molecules = Localizations()
-    angs = [molecules.red_angle, molecules.orange_angle]
+    angs = np.array([molecules.red_angle, molecules.orange_angle])
     if pixels <= LOCALIZE_LIMIT:
         # run the localization in one chunk
         fits, crlbs, frames  =localize_image_slices(images, 
@@ -559,9 +559,11 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
     else:
         rounds = pixels // LOCALIZE_LIMIT + 1# Divide into manageable sizes
         chunk = o // (rounds)   # Determine dividing chunk size of stacks
-        for i in range(rounds+1): # Loop over number of times needed to chunk through data set
+        #%%
+        for i in range(rounds): # Loop over number of times needed to chunk through data set
             # Ensure we don't go over our stack size
             stride = np.min((o,(i+1)*chunk)) 
+            print(i*chunk, stride, o)
             #Parse the image into a subset
             sub_images = images[:,:,i*chunk:stride]
             slice_fits, slice_crlbs, slice_frames  = localize_image_slices(sub_images, 
@@ -569,7 +571,8 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
                                                                            gauss_sigma,
                                                                            rolling_ball_radius,
                                                                            rolling_ball_height,
-                                                                           pixel_width, 
+                                                                           pixel_width,
+                                                                           blanking,
                                                                            threshold,
                                                                            molecules.split,
                                                                            angs)
@@ -582,11 +585,11 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
                 crlbs = np.concatenate((crlbs,slice_crlbs))
                 frames = np.concatenate((frames,slice_frames+start))
 
-    
+    #%%
     molecules.store_fits(fits, crlbs, frames)
     return molecules
     
-def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, split = 0, angs = [0,0]):
+def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, split = 0, angs = np.array([0,0])):
     """
     Will use MLE localization algorithm to analyze images such that maximum uptime
     is kept on the gpu
@@ -638,8 +641,8 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     centers = count_peaks(peaks, blanking)
     hot_pixels = centers.shape[0] # number of areas found to localize
     # Set up device memory for next round of computation
-    
-    d_rotation = cp.array([angs[np.int8(centers[i,1] <= split)] for i in range(hot_pixels)])# determine the 'color' of the molecule based on it's initial location
+    print(split)
+    d_rotation = cp.array([angs[int(centers[i,1] <= split)] for i in range(hot_pixels)])# determine the 'color' of the molecule based on it's initial location
     #print([angs[centers[i,1] <= split] for i in range(hot_pixels)])
     d_centers = send_to_device(centers)
     d_psfs = cp.empty((2*pixel_width+1, 2*pixel_width +1,centers.shape[0]))
@@ -659,7 +662,7 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     
     # Clean up GPU memory
     del d_psfs
-    del d_fitting_vectors
+    del d_fitting_vectors, d_rotation
     # Adjust for global context
     list_of_good_fits = remove_bad_fits(fitted_vectors)
     fitted_vectors[:,0] += centers[:,1]
