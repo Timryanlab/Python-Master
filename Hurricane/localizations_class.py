@@ -12,45 +12,48 @@ from ryan_image_io import *
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 from localization_kernels import *
-
+from scipy.interpolate import interp1d
 from mpl_toolkits.mplot3d import Axes3D
 
 #% Functions
 def simulate_psf_array(N = 100, pix = 5):
-    psf_image_array = np.zeros((2*pix+1,2*pix+1,N))
-    x_build = np.linspace(-pix,pix,2*pix +1)
-    X , Y = np.meshgrid(x_build, x_build)
-    truths = np.zeros((N,6))
-    loc1 = Localizations()
+    """So this will simulate a PSF array that when transferred to the GPU can be
+    fit by the localization algorithm located in 'localizatoin_kernels"""
     
-    orange, red = loc1.get_sigma_curves()
+    psf_image_array = np.zeros((2*pix+1,2*pix+1,N)) # Preallocate array
+    x_build = np.linspace(-pix,pix,2*pix +1) # Get ready to make mesh grid
+    X , Y = np.meshgrid(x_build, x_build) # mesh grid
+    truths = np.zeros((N,6)) # preallocate truths array
+    loc1 = Localizations() # Grab calibration file values
+    
+    orange, red = loc1.get_sigma_curves() # Grab the axial calibration values 
     loc1.split = 0
     for i in range(N):
         # Start by Determining your truths
         truths[i,0] = np.random.uniform(-0.5, 0.5)
-        truths[i,1] = np.random.uniform(-0.5, 0.5)
-        truths[i,2] = np.random.uniform(1000, 3000)
-        ind = np.random.randint(0,orange.shape[1])
-        if truths[i,0] <= loc1.split:    
+        truths[i,1] = np.random.uniform(-0.5, 0.5) # Position
+        truths[i,2] = np.random.uniform(1000, 3000) # Photons
+        ind = np.random.randint(0,orange.shape[1]) # Because we're selecting from a curve, we choose a random position
+        if truths[i,0] <= loc1.split: # determine calibration based off position
             truths[i,3] = orange[1,ind]
             truths[i,4] = orange[2,ind]
         else:
             truths[i,3] = red[1,ind]
             truths[i,4] = red[2,ind]
-        truths[i,3] += np.random.normal(0,0.001)
-        truths[i,4] += np.random.normal(0,0.001)
-        truths[i,5] = np.random.uniform(1, 3)
+        truths[i,3] += np.random.normal(0,0.001) 
+        truths[i,4] += np.random.normal(0,0.001) # Make some noise!
+        truths[i,5] = np.random.uniform(1, 3) # Offset
         
+        # Build your x/y guass components
         x_gauss = 0.5 * (erf( (X - truths[i,0] + 0.5) / (np.sqrt(2 * truths[i,3]**2))) - erf( (X - truths[i,0] - 0.5) / (np.sqrt(2 * truths[i,3]**2))))
         y_gauss = 0.5 * (erf( (Y - truths[i,1] + 0.5) / (np.sqrt(2 * truths[i,4]**2))) - erf( (Y - truths[i,1] - 0.5) / (np.sqrt(2 * truths[i,4]**2))))
         #print(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
-        psf_image_array[:,:,i] = np.random.poisson(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
+        psf_image_array[:,:,i] = np.random.poisson(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5])) # make some noise and return it
     return psf_image_array, truths
 
 #%% Localization Class
 class Localizations:
-    def __init__(self, filename, pixel_size = 0.13):
-        self.
+    def __init__(self, pixel_size = 0.13):
         self.xf = np.array([])
         self.yf = np.array([])
         self.zf = np.array([])
@@ -64,12 +67,14 @@ class Localizations:
         self.yf_error = np.array([])
         self.sx_error = np.array([])
         self.sy_error = np.array([])
+        # Load Calibration Files
         cal_fpath = 'C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\'
         self.cal_files = [cal_fpath + 'z_calib.mat',  # axial calibration
                           cal_fpath + '2_color_calibration.mat']  # 2 color calibration
-        self.store_calibration_values()
+        self.store_calibration_values() 
         
     def show_localizations(self):
+        """Perform a 3D scatter plot of X-Y-Z localization data"""
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d') 
     
@@ -81,6 +86,7 @@ class Localizations:
         fig.show()
     
     def show_axial_sigma_curve(self):
+        """ Show z vs. Sigma curves"""
         fig = plt.figure()
         (ax1, ax2) = fig.subplots(1,2) 
         
@@ -98,6 +104,7 @@ class Localizations:
         fig.show()
         
     def store_fits(self, fitting_vectors, crlb_vectors, frames):
+        """When provided with localization data, store it into the class"""
         self.xf = self.pixel_size*(fitting_vectors[:,0])
         self.yf = self.pixel_size*(fitting_vectors[:,1])
         self.zf = np.empty_like(self.xf)
@@ -108,11 +115,28 @@ class Localizations:
         self.frames = frames
         self.color = self.xf <= self.split*self.pixel_size  # given the 2 color system we can use a boolean variable to relay color info
                                        # False = Red channel True = Orange Channel
-        self.get_z_from_widths()
-        self.make_z_corrections()
+        self.get_z_from_widths() # Z assignment
+        self.make_z_corrections() # X-Y corrections based on astigmatism tilt
         self.xf_error = self.pixel_size*crlb_vectors[:,0]**0.5
         self.yf_error = self.pixel_size*crlb_vectors[:,1]**0.5
         self.sx_error = self.pixel_size*crlb_vectors[:,3]**0.5
+    
+    def make_z_corrections(self):
+        orange_x_int = interp1d(self.orange_z_tilt, self.orange_x_tilt)
+        orange_y_int = interp1d(self.orange_z_tilt, self.orange_y_tilt)
+        
+        red_x_int = interp1d(self.red_z_tilt, self.red_x_tilt)
+        red_y_int = interp1d(self.red_z_tilt, self.red_y_tilt)
+        
+        for i in range(self.xf.shape[0]):
+            if self.color[i]:
+                self.xf[i] -= self.pixel_size*orange_x_int(self.xf[i])
+                self.yf[i] -= self.pixel_size*orange_y_int(self.yf[i])
+                self.zf /= self.orange_refraction_tilt
+            else:
+                self.xf[i] -= self.pixel_size*red_x_int(self.xf[i])
+                self.yf[i] -= self.pixel_size*red_y_int(self.yf[i])
+                self.zf /= self.red_refraction_tilt
         
     def get_z_from_widths(self):
         # Depending on color, we should load either orange or red z params

@@ -199,11 +199,12 @@ def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
         t0 = time.clock()
         gpu_fits = cp.empty_like(cp.asarray(fits))
         gpu_psf = cp.asarray(psf_array)
+        d_rotation = cp.asarray(0*np.ones(fits.shape[0]))
         t_load = time.clock()
         if N <1024: # Broadcasting rules
-            fitting_kernel((N,),(1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+            fitting_kernel((N,),(1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
         else:
-            fitting_kernel((1024,),( N//1024 + 1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+            fitting_kernel((1024,),( N//1024 + 1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
         t_fit = time.clock()
         cpu_fits = cp.asnumpy(gpu_fits)
         t_return = time.clock()
@@ -226,10 +227,11 @@ def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
             gpu_fits = cp.empty_like(cp.asarray(fits[start:end,:]))
             gpu_psf = cp.asarray(psf_array[:,:,start:end])
             times[i,1] = time.clock()
+            d_rotation = cp.asarray(ang*np.ones(fits.shape[0]))
             if (end-start) <1024: # Broadcasting rules
-                fitting_kernel(((end-start),),(1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+                fitting_kernel(((end-start),),(1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
             else:
-                fitting_kernel((1024,),( (end-start)//1024 + 1,),(gpu_psf,gpu_fits, rotation, gpu_psf.shape[2], cycles))
+                fitting_kernel((1024,),( (end-start)//1024 + 1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
             times[i,2] = time.clock()
             fits[start:end,:] = cp.asnumpy(gpu_fits)
             times[i,3] = time.clock()
@@ -250,6 +252,6 @@ def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
     
 #%% Main Workspace
 if __name__ == '__main__':
-    results, truths = test_gpu_fit(600000, True)
+    results, truths = test_gpu_fit(500, True)
 
 
