@@ -73,7 +73,7 @@ class Localizations:
                           cal_fpath + '2_color_calibration.mat']  # 2 color calibration
         self.store_calibration_values() 
         
-    def show_localizations(self):
+    def show_all(self):
         """Perform a 3D scatter plot of X-Y-Z localization data"""
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d') 
@@ -122,6 +122,7 @@ class Localizations:
         self.sx_error = self.pixel_size*crlb_vectors[:,3]**0.5
     
     def make_z_corrections(self):
+        '''Make astigmatism tilt based correction'''
         orange_x_int = interp1d(self.orange_z_tilt, self.orange_x_tilt)
         orange_y_int = interp1d(self.orange_z_tilt, self.orange_y_tilt)
         
@@ -132,11 +133,11 @@ class Localizations:
             if self.color[i]:
                 self.xf[i] -= self.pixel_size*orange_x_int(self.xf[i])
                 self.yf[i] -= self.pixel_size*orange_y_int(self.yf[i])
-                self.zf /= self.orange_refraction_tilt
+                self.zf[i] /= self.orange_refraction_tilt
             else:
                 self.xf[i] -= self.pixel_size*red_x_int(self.xf[i])
                 self.yf[i] -= self.pixel_size*red_y_int(self.yf[i])
-                self.zf /= self.red_refraction_tilt
+                self.zf[i] /= self.red_refraction_tilt
         
     def get_z_from_widths(self):
         # Depending on color, we should load either orange or red z params
@@ -274,7 +275,33 @@ class Localizations:
         self.orange_2_red_x_weights = mat_dict['o2rx'][:,0]
         self.orange_2_red_y_weights = mat_dict['o2ry'][:,0]
         self.split = mat_dict['split'][0][0]
+    
+    def separate_colors(self):
+        self.xf_red = self.xf[~self.color]
+        self.yf_red = self.yf[~self.color]
+        self.x = np.array([self.xf[self.color]**3, 
+                     self.yf[self.color]**3, 
+                     self.xf[self.color]**2*self.yf[self.color], 
+                     self.xf[self.color]*self.yf[self.color]**2,
+                     self.xf[self.color]**2, 
+                     self.yf[self.color]**2,
+                     self.xf[self.color]*self.yf[self.color],
+                     self.xf[self.color], 
+                     self.yf[self.color],
+                     self.xf[self.color]*0 + 1])
+        self.xf_orange = np.matmul(self.orange_2_red_x_weights,self.x)
+        self.yf_orange = np.matmul(self.orange_2_red_y_weights,self.x)
+    
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d') 
+    
+        ax.scatter(self.xf_red, self.yf_red, self.zf[~self.color])
+        ax.scatter(self.xf_orange, self.yf_orange, self.zf[self.color])
         
+        ax.set_xlabel('X um')
+        ax.set_ylabel('Y um')
+        ax.set_zlabel('Z um')
+        fig.show()    
         
 #% Main Workspace
 if __name__ == '__main__':
@@ -292,4 +319,5 @@ if __name__ == '__main__':
     crlb_vectors = get_error_values(keep_psfs, keep_vectors)
     loc1.store_fits(keep_vectors, crlb_vectors, np.array(range(keep_vectors.shape[0])))
     loc1.show_axial_sigma_curve()
+    
     
