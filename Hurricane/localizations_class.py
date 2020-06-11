@@ -53,7 +53,8 @@ def simulate_psf_array(N = 100, pix = 5):
 
 #%% Localization Class
 class Localizations:
-    def __init__(self, pixel_size = 0.13):
+    def __init__(self, file_name='', pixel_size = 0.13, pixel_width = 5):
+        self.name = file_name
         self.xf = np.array([])
         self.yf = np.array([])
         self.zf = np.array([])
@@ -63,6 +64,7 @@ class Localizations:
         self.o = np.array([])
         self.frames = np.array([])
         self.pixel_size = pixel_size
+        self.pixel_width = pixel_width
         self.xf_error = np.array([])
         self.yf_error = np.array([])
         self.sx_error = np.array([])
@@ -113,7 +115,7 @@ class Localizations:
         self.sy = np.abs(self.pixel_size*fitting_vectors[:,4])
         self.o = fitting_vectors[:,5]
         self.frames = frames
-        self.color = self.xf <= self.split*self.pixel_size  # given the 2 color system we can use a boolean variable to relay color info
+        self.color = self.xf >= self.split*self.pixel_size  # given the 2 color system we can use a boolean variable to relay color info
                                        # False = Red channel True = Orange Channel
         self.get_z_from_widths() # Z assignment
         self.make_z_corrections() # X-Y corrections based on astigmatism tilt
@@ -277,18 +279,19 @@ class Localizations:
         self.split = mat_dict['split'][0][0]
     
     def separate_colors(self):
+        """This makes the overlay correction between the channels in X and Y, soon to be Z"""
         self.xf_red = self.xf[~self.color]
         self.yf_red = self.yf[~self.color]
         self.x = np.array([self.xf[self.color]**3, 
-                     self.yf[self.color]**3, 
-                     self.xf[self.color]**2*self.yf[self.color], 
-                     self.xf[self.color]*self.yf[self.color]**2,
-                     self.xf[self.color]**2, 
-                     self.yf[self.color]**2,
-                     self.xf[self.color]*self.yf[self.color],
-                     self.xf[self.color], 
-                     self.yf[self.color],
-                     self.xf[self.color]*0 + 1])
+                         self.yf[self.color]**3, 
+                         self.xf[self.color]**2*self.yf[self.color], 
+                         self.xf[self.color]*self.yf[self.color]**2,
+                         self.xf[self.color]**2, 
+                         self.yf[self.color]**2,
+                         self.xf[self.color]*self.yf[self.color],
+                         self.xf[self.color], 
+                         self.yf[self.color],
+                         self.xf[self.color]*0 + 1])
         self.xf_orange = np.matmul(self.orange_2_red_x_weights,self.x)
         self.yf_orange = np.matmul(self.orange_2_red_y_weights,self.x)
     
@@ -308,7 +311,7 @@ if __name__ == '__main__':
     fpath = 'C:\\Users\\andre\\Documents\\GitHub\\Matlab-Master\\Hurricane\\hurricane_functions\\z_calib.mat'
 
     
-    loc1 = Localizations()
+    loc1 = Localizations('Example')
     loc1.split = 0
     psfs, truths = simulate_psf_array(1000)
     fits = fit_psf_array_on_gpu(psfs)

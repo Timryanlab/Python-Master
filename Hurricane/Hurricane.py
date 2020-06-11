@@ -323,6 +323,7 @@ def gpu_find_peaks(d_image_2, d_image_3, threshold, pixel_width):
 
     '''
     blockdim = (32,32) #Specify number of threads in a 2D grid
+    
     m,n,o = image_size(d_image_2)
     griddim = (m// blockdim[0] + 1, n//blockdim[1] + 1,o) #Specify the block landscape
     gpu_peaks[griddim, blockdim](d_image_2, d_image_3,np.ascontiguousarray(threshold), np.ascontiguousarray(pixel_width))
@@ -521,8 +522,8 @@ def remove_bad_fits(fitting_vector):
                 if np.abs(fitting_vector[i,3]) < 6 and np.abs(fitting_vector[i,4]) < 6:
 
                     if np.abs(fitting_vector[i,3]) > 0.6 and np.abs(fitting_vector[i,4]) > 0.6:
-                        if fitting_vector[i,2] > 100 and fitting_vector[i,2] < 100000:
-                            if fitting_vector[i,5] > -10 and fitting_vector[i,5] < 100:
+                        if fitting_vector[i,2] > 10 and fitting_vector[i,2] < 10000000:
+                            if fitting_vector[i,5] > -100 and fitting_vector[i,5] < 100:
 
                                 index.append(i)
     return index
@@ -585,10 +586,34 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
                 crlbs = np.concatenate((crlbs,slice_crlbs))
                 frames = np.concatenate((frames,slice_frames+start))
 
-    #%%
+
     molecules.store_fits(fits, crlbs, frames)
     return molecules
-    
+#%%
+def wavelet_denoising(images, levels = 3):
+    """Images is the stack of images to denoise, levels tells the number of iterations for the denoising"""
+    baselet = np.array([1/16, 1/4, 3/8, 1/4, 1/16])
+    m,n,o = image_size(images)
+    out_images = np.empty_like(images)
+    for frame in range(o):
+        image = images[:,:,frame]
+        waves  = np.empty((m,n,levels))
+        for i in range(levels):
+            wavelet = baselet
+            for j in range(baselet.shape[0] - 1):
+                wavelet = np.insert(wavelet,baselet.shape[0] - j - 1,np.zeros(2**i-1))
+            blurred_image = np.copy(image) # Initially put the blurred_image defined outside of the levels loop
+            for j in range(m):
+                blurred_image[j,:] = np.convolve(blurred_image[j,:],wavelet,mode='same')
+            
+            for j in range(n):
+                blurred_image[:,j] = np.convolve(blurred_image[:,j],wavelet,mode='same')
+                
+            waves[:,:,i] = (image - blurred_image) # we threshold above 2
+            image = np.copy(blurred_image) # use blurred image for the next
+        out_images[:,:,frame] = waves[:,:,1]*np.where(waves[:,:,1] > 2, 1, 0) # we select the second size scale for psf detection
+    return out_images
+#%%        
 def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, split = 0, angs = np.array([0,0])):
     """
     Will use MLE localization algorithm to analyze images such that maximum uptime
@@ -683,7 +708,7 @@ if __name__ == '__main__':
     fname = "cell10_dz20_r2.tif" # File name
     
     file_name = fpath + fname
-    
+    '''
     result =  localize_image_stack(file_name, 
                                     pixel_size = 0.130, 
                                     gauss_sigma = 2.5, 
@@ -695,7 +720,7 @@ if __name__ == '__main__':
                                     start = 0,
                                     finish = 0)
     result.show_localizations()
-    result.show_axial_sigma_curve()
+    result.show_axial_sigma_curve()'''
     '''
     psfs, truths = simulate_psf_array(1000)
     fits =  fit_psf_array(psfs)

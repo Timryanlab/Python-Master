@@ -108,7 +108,8 @@ def load_tiff_to_array(fname, start = 0, stop = 0):
     
     try:
         #Get shape of image
-        m,n = np.shape(im)
+        m = im.height
+        n = im.width
         o = im.n_frames 
     except:
         o = 1
@@ -146,7 +147,7 @@ def load_tiff_to_array(fname, start = 0, stop = 0):
         image_array = np.zeros((m,n,o))
         for i in range(o):
             im.seek(i) #Seek to frame i in image stack
-            image_array[:,:,i]= np.array(im) #Populate data into preallocated variable          
+            image_array[:,:,i]= np.array(im.getdata()).reshape((m,n)) #Populate data into preallocated variable          
 
     return image_array # return numpy image array
 
@@ -172,7 +173,7 @@ def save_array_to_tiff(array, file):
     """Function to save an array as a multipage tiff"""
     m,n,o = image_size(array)
     Im = []
-    if i > 1:
+    if o > 1:
         for i in range(o):
             Im.append(Image.fromarray(array[:,:,i]))
     else:
@@ -195,9 +196,11 @@ def show_frame_stack(image_stack, title = 'Image'):
         plt.figure()
     
 def grab_image_files(folder):
-    """Takes a list of folder contents and returns a list of images only"""
+    """Takes folder path and returns a list of image files only"""
     files = []
-    for file in folder:
+    file_path = 'D:\\Image Processing Folder\\Background Subtractions for Ryan\\'
+    all_files = os.listdir(folder)
+    for file in all_files:
         if file.find('.tif') + file.find('.fits') > -2:
             files.append(file)
     return files

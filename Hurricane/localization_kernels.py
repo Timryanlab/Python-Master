@@ -49,7 +49,7 @@ extern "C"
 	}
     
     if( index < images){ // ensure that the thread is working on a molecule
-        double fits[6] = {0, 0, 0, 1.9, 1.9, 200}; // preallocate fitting array
+        double fits[6] = {0, 0, 0, 1.5, 1.5, 200}; // preallocate fitting array
         double psf[pix*pix];
         double pi = 3.14159265358979323846; // close enough
         
@@ -227,7 +227,7 @@ def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
             gpu_fits = cp.empty_like(cp.asarray(fits[start:end,:]))
             gpu_psf = cp.asarray(psf_array[:,:,start:end])
             times[i,1] = time.clock()
-            d_rotation = cp.asarray(ang*np.ones(fits.shape[0]))
+            d_rotation = cp.asarray(rotation*np.ones(fits.shape[0]))
             if (end-start) <1024: # Broadcasting rules
                 fitting_kernel(((end-start),),(1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
             else:

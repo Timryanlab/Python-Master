@@ -344,7 +344,8 @@ def cupy_rolling_ball(images, gauss_sigma = 2.5, rolling_ball_radius = 6, rollin
     for i in range(o):
         cupy.cupyx.ndimage.convolve(image1[:,:,i], kernel, images2[:,:,i])
     return cp.asnumpy(images2)
-    
+
+
 #%% Working Namespace Section of Code
 if __name__ == '__main__':
     """
