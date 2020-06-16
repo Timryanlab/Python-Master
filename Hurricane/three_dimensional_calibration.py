@@ -99,7 +99,7 @@ def get_eliptical_angle(image, pixel_width = 5):
         #out_images[:,:,i-] = (mock_image-image)**2
         
         C[i-45] = ((mock_image-image)**2).sum()
-    save_array_as_image(out_images, 'Rotation_example.tif')
+    #save_array_as_image(out_images, 'Rotation_example.tif') # This line saves the output of the elipticity measurement for user viewing
     min_angle = np.argwhere(C==C.min()) + 45 # Returning the minimum angle corresponds to lowest Cost
     return min_angle
 
@@ -312,8 +312,7 @@ def build_axial_sigma_models(locs, results_to_save, color):
     results_to_save['model_red_sx'] =  interp1d(list_of_unique_red_zs, model_red_sx, kind = 'cubic')
     results_to_save['model_orange_sy'] = interp1d(list_of_unique_orange_zs, model_orange_sy, kind = 'cubic')
     results_to_save['model_red_sy'] =  interp1d(list_of_unique_red_zs, model_red_sy, kind = 'cubic')
-    #results_to_save['list_of_unique_orange_zs'] = list_of_unique_orange_zs
-    #results_to_save['list_of_unique_red_zs'] = list_of_unique_red_zs
+
     
 #%% Main Workspace
 if __name__ == '__main__':
@@ -331,132 +330,61 @@ if __name__ == '__main__':
     results_to_save = {'orange_angle' : orange_angle,
                        'red_angle' : red_angle}
     
+    # Fit those PSFs
     locs = get_fitting_data(psfs, orange_angle, red_angle, color, offset_index)
     
     correlate_axial_curves(locs, color) 
     
     build_axial_sigma_models(locs, results_to_save, color)
-    #%% Show some Z stuff
-    plt.subplot(2,3,1)
-    for i in range(len(psfs)):
-        plt.scatter(locs[i].frames,locs[i].sx)
-        plt.scatter(locs[i].frames,locs[i].sy)
-    plt.title('Everything without offsets')
     
-    plt.subplot(2,3,2)
-    red_molecules = np.argwhere(color == 0)
-    orange_molecules = np.argwhere(color == 1)
-    for i in range(orange_molecules.shape[0]):
-        plt.scatter(locs[orange_molecules[i][0]].frames ,locs[orange_molecules[i][0]].sx)
-        plt.scatter(locs[orange_molecules[i][0]].frames ,locs[orange_molecules[i][0]].sy)
-    plt.title('Orange Without Offset')
-    
-    plt.subplot(2,3,3)
-    for i in range(orange_molecules.shape[0]):
-        plt.scatter(locs[orange_molecules[i][0]].frames + locs[orange_molecules[i][0]].frame_offset,locs[orange_molecules[i][0]].sx)
-        plt.scatter(locs[orange_molecules[i][0]].frames + locs[orange_molecules[i][0]].frame_offset,locs[orange_molecules[i][0]].sy)
-    plt.title('Orange With Offset')
-    
-    plt.subplot(2,3,5)
-    for i in range(red_molecules.shape[0]):
-        plt.scatter(locs[red_molecules[i][0]].frames ,locs[red_molecules[i][0]].sx)
-        plt.scatter(locs[red_molecules[i][0]].frames ,locs[red_molecules[i][0]].sy)
-    plt.title('Red Without Offset')
-    
-    plt.subplot(2,3,6)
-    for i in range(red_molecules.shape[0]):
-        plt.scatter(locs[red_molecules[i][0]].frames + locs[red_molecules[i][0]].frame_offset,locs[red_molecules[i][0]].sx)
-        plt.scatter(locs[red_molecules[i][0]].frames + locs[red_molecules[i][0]].frame_offset,locs[red_molecules[i][0]].sy)
-    plt.title('Red With Offset')
-    
-    #%% Z-Data Averaging
-    
-    # build a single array of sigma values
-    all_red_zs = np.array([])
-    all_red_x_sigmas = np.array([])
-    all_red_y_sigmas = np.array([])
-    all_orange_zs = np.array([])
-    all_orange_x_sigmas = np.array([])
-    all_orange_y_sigmas = np.array([])
+    # Show me what you got!
+    x = np.linspace(-0.8,0.8,1600)
+    plt.plot(x,results_to_save['model_orange_sx'](x), label = 'Orange sig x')
+    plt.plot(x,results_to_save['model_orange_sy'](x), label = 'Orange sig y')
+    plt.plot(x,results_to_save['model_red_sx'](x), label = 'Red sig x')
+    plt.plot(x,results_to_save['model_red_sy'](x), label = 'Red sig y')
+    plt.legend()
+    plt.title('PSF-width as a function of axial position')
+    plt.xlabel('Relative axial location (um)')
+    plt.ylabel('Width of parameter (um)')
+
+    # So now we've got spline interpolations of our sigma functions, this will allow us to pinpoint our Z position
+    orange_xs = np.array([])
+    orange_ys = np.array([])
+    red_xs = np.array([])
+    red_ys = np.array([])
+    red_zs = np.array([])
+    orange_zs = np.array([])
     for i in range(len(locs)):
         loc = locs[i]
         if color[i]:
-            all_orange_zs = np.append(all_orange_zs, loc.zf)
-            all_orange_x_sigmas = np.append(all_orange_x_sigmas, loc.sx)
-            all_orange_y_sigmas = np.append(all_orange_y_sigmas, loc.sy)
+            sigx_model = results_to_save['model_orange_sx'](x)
+            sigy_model = results_to_save['model_orange_sy'](x)
         else:
-            all_red_zs = np.append(all_red_zs, loc.zf)
-            all_red_x_sigmas = np.append(all_red_x_sigmas, loc.sx)
-            all_red_y_sigmas = np.append(all_red_y_sigmas, loc.sy)
-    # Hey at this point we can treat all of these together because they're independent now
-    #%%
-    list_of_unique_orange_zs = np.unique(all_orange_zs)
-    list_of_unique_red_zs = np.unique(all_red_zs)
-    
-    model_orange_sx = np.array([])
-    model_orange_sy = np.array([])
-    model_red_sx = np.array([])
-    model_red_sy = np.array([])
-    plt.figure()
-    for z in list_of_unique_orange_zs:
-        sub_zs = np.argwhere(all_orange_zs == z) # Find all indices that correspond to the current height
-        
-        sub_sigma_x = all_orange_x_sigmas[sub_zs]
-        sub_sigma_y = all_orange_y_sigmas[sub_zs]
-    
-        model_orange_sx = np.append(model_orange_sx,sub_sigma_x.mean())
-        model_orange_sy = np.append(model_orange_sy,sub_sigma_y.mean())
-    
-    for z in list_of_unique_red_zs:
-        sub_zs = np.argwhere(all_red_zs == z) # Find all indices that correspond to the current height
-        
-        sub_sigma_x = all_red_x_sigmas[sub_zs]
-        sub_sigma_y = all_red_y_sigmas[sub_zs]
-    
-        model_red_sx = np.append(model_red_sx,sub_sigma_x.mean())
-        model_red_sy = np.append(model_red_sy,sub_sigma_y.mean())
-    plt.legend()
-    plt.plot(list_of_unique_red_zs, model_red_sx, label = 'X Curve' )
-    plt.plot(list_of_unique_red_zs, model_red_sy, label = 'Y Curve' )
-    plt.title('Red Channel')
-    
-    plt.figure()
-    
+            sigx_model = results_to_save['model_red_sx'](x)
+            sigy_model = results_to_save['model_red_sy'](x)
+        for j in range(loc.xf.shape[0]): # loop over all them fits
+            sigma_distance = ((sigx_model**0.5 - loc.sx[j]**0.5)**2 + 
+                              (sigy_model**0.5 - loc.sy[j]**0.5)**2)**0.5
+            x_index = np.argwhere(sigma_distance == sigma_distance.min())[0][0]
+            loc.zf[j] = x[x_index]
+            
+        mid_zs_index = np.argwhere(np.abs(loc.zf) < 0.3)
+        loc.xf -= loc.xf[mid_zs_index].mean()
+        loc.yf -= loc.yf[mid_zs_index].mean()
+        if color[i]:
+            orange_xs = np.append(orange_xs,loc.xf)
+            orange_ys = np.append(orange_ys,loc.yf)
+            orange_zs = np.append(orange_zs,loc.zf)
+        else:
+            red_xs = np.append(red_xs,loc.xf)
+            red_ys = np.append(red_ys,loc.yf)
+            red_zs = np.append(red_zs,loc.zf)
+            
+    # At this point, locs coords have been updated such the the 'cofocal' region of these curves are centered at (0,0,0) um
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d') 
 
-    initial_point = 0.75 # This is a very low side estimate of where the curve interesction point is
-    
-    orange_differential_sigma = np.abs(model_orange_sx - model_orange_sy)
-    orange_initial_index = np.argwhere(np.abs(list_of_unique_orange_zs - initial_point) <= 0.02)[0][0]
-    orange_cofocal_index = np.argwhere(orange_differential_sigma[orange_initial_index:orange_initial_index + 20] == orange_differential_sigma[orange_initial_index:orange_initial_index + 20].min())[0][0] + orange_initial_index
-
-    list_of_unique_orange_zs -= list_of_unique_orange_zs[orange_cofocal_index]
-    
-    red_differential_sigma = np.abs(model_red_sx - model_red_sy)
-    red_initial_index = np.argwhere(np.abs(list_of_unique_red_zs - initial_point) <= 0.02)[0][0]
-    red_cofocal_index = np.argwhere(red_differential_sigma[red_initial_index: red_initial_index + 20] == red_differential_sigma[red_initial_index:red_initial_index + 20].min())[0][0] + red_initial_index
-
-    list_of_unique_red_zs -= list_of_unique_red_zs[red_cofocal_index]
-    
-    plt.plot(list_of_unique_orange_zs, gaussian_filter1d(model_orange_sx,3), label = 'orange X Curve' )
-    plt.plot(list_of_unique_orange_zs, gaussian_filter1d(model_orange_sy, 3), label = 'orange Y Curve' )
-    plt.plot(list_of_unique_red_zs, gaussian_filter1d(model_red_sx, 3), label = 'red X Curve' )
-    plt.plot(list_of_unique_red_zs, gaussian_filter1d(model_red_sy, 3), label = 'red Y Curve' )
-    plt.legend()
-    plt.title('Orange Channel')
-    
-    # Smooth Curves
-    model_orange_sx = gaussian_filter1d(model_orange_sx,3)
-    model_red_sx = gaussian_filter1d(model_red_sx,3)
-    model_orange_sy = gaussian_filter1d(model_orange_sy,3)
-    model_red_sy = gaussian_filter1d(model_red_sy,3)
-    
-    
-    # Store Curves in the results dictionary
-    results_to_save['model_orange_sx'] = model_orange_sx
-    results_to_save['model_red_sx'] = model_red_sx
-    results_to_save['model_orange_sy'] = model_orange_sy
-    results_to_save['model_red_sy'] = model_red_sy
-    results_to_save['list_of_unique_orange_zs'] = list_of_unique_orange_zs
-    results_to_save['list_of_unique_red_zs'] = list_of_unique_red_zs
-    
-    
+    ax.scatter(red_xs, red_ys, red_zs, 'r', label = 'Red')
+    ax.scatter(orange_xs, orange_ys, orange_zs, 'b', label = 'Orange')
+    ax.legend()
