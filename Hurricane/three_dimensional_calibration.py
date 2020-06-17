@@ -313,6 +313,7 @@ def build_axial_sigma_models(locs, results_to_save, color):
     results_to_save['model_orange_sy'] = interp1d(list_of_unique_orange_zs, model_orange_sy, kind = 'cubic')
     results_to_save['model_red_sy'] =  interp1d(list_of_unique_red_zs, model_red_sy, kind = 'cubic')
 
+
     
 #%% Main Workspace
 if __name__ == '__main__':
@@ -387,4 +388,91 @@ if __name__ == '__main__':
 
     ax.scatter(red_xs, red_ys, red_zs, 'r', label = 'Red')
     ax.scatter(orange_xs, orange_ys, orange_zs, 'b', label = 'Orange')
+    ax.legend()
+    
+    orange_search_zs = np.linspace(orange_zs.min(),orange_zs.max(),20)
+    orange_spline_xs = np.empty(orange_search_zs.shape[0] -1)
+    orange_spline_ys = np.empty(orange_search_zs.shape[0] -1)
+    orange_spline_zs = np.empty(orange_search_zs.shape[0] -1)
+    
+    for i in range(orange_search_zs.shape[0]-1):
+        index_within_z = np.argwhere(np.abs(orange_zs - (orange_search_zs[i] + orange_search_zs[i+1])/2) <= orange_search_zs[i+1] - orange_search_zs[i])
+        X_set = orange_xs[index_within_z]
+        Y_set = orange_ys[index_within_z]
+        Z_set = orange_zs[index_within_z]
+        
+        r = ((X_set-X_set.mean())**2 + (Y_set- Y_set.mean())**2)**0.5/locs[0].pixel_size
+        within_range = np.argwhere(r < 0.5)[:,0]
+        orange_spline_xs[i] = X_set[within_range].mean()
+        orange_spline_ys[i] = Y_set[within_range].mean()
+        orange_spline_zs[i] = Z_set[within_range].mean()
+
+    
+    orange_search_zs = np.linspace(red_zs.min(),red_zs.max(),20)
+    red_spline_xs = np.empty(red_search_zs.shape[0] -1)
+    red_spline_ys = np.empty(red_search_zs.shape[0] -1)
+    red_spline_zs = np.empty(red_search_zs.shape[0] -1)
+    
+    for i in range(red_search_zs.shape[0]-1):
+        index_within_z = np.argwhere(np.abs(red_zs - (red_search_zs[i] + red_search_zs[i+1])/2) <= red_search_zs[i+1] - red_search_zs[i])
+        X_set = red_xs[index_within_z]
+        Y_set = red_ys[index_within_z]
+        Z_set = red_zs[index_within_z]
+        
+        r = ((X_set-X_set.mean())**2 + (Y_set- Y_set.mean())**2)**0.5/locs[0].pixel_size
+        within_range = np.argwhere(r < 0.5)[:,0]
+        red_spline_xs[i] = X_set[within_range].mean()
+        red_spline_ys[i] = Y_set[within_range].mean()
+        red_spline_zs[i] = Z_set[within_range].mean()
+        
+
+
+        
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d') 
+
+    ax.plot(orange_spline_xs, orange_spline_ys, orange_spline_zs, 'b', label = 'Average Measurement')
+    ax.scatter(orange_xs, orange_ys, orange_zs, 'c', label = 'Orange_scatter')
+    ax.legend()
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d') 
+
+    ax.plot(gaussian_filter1d(red_spline_xs, 1), gaussian_filter1d(red_spline_ys, 1), red_spline_zs, 'b', label = 'Average Measurement')
+    ax.scatter(red_xs, red_ys, red_zs, 'r', label = 'Red Scatter')
+    ax.legend()
+    
+    # Gaussian Smoothing over the intervals for X Y spline
+    red_spline_xs = gaussian_filter1d(red_spline_xs, 1)
+    red_spline_ys = gaussian_filter1d(red_spline_ys, 1)
+    
+    # Gaussian Smoothing over the intervals for X Y spline
+    orange_spline_xs = gaussian_filter1d(orange_spline_xs, 1)
+    orange_spline_ys = gaussian_filter1d(orange_spline_ys, 1)
+    
+    # Save results as interpolations to the results dictionary
+    results_to_save['model_orange_x_axial_correction'] = interp1d(orange_spline_zs, orange_spline_xs, kind = 'cubic')
+    results_to_save['model_orange_y_axial_correction'] = interp1d(orange_spline_zs, orange_spline_ys, kind = 'cubic')
+    results_to_save['model_red_x_axial_correction'] = interp1d(red_spline_zs, red_spline_xs, kind = 'cubic')
+    results_to_save['model_red_y_axial_correction'] = interp1d(red_spline_zs, red_spline_ys, kind = 'cubic')
+    
+    
+    sub_reds = np.where(np.abs(red_zs) <= 0.4)[0]
+    red_x_corrections = results_to_save['model_red_x_axial_correction'](red_zs[sub_reds])
+    red_y_corrections = results_to_save['model_red_y_axial_correction'](red_zs[sub_reds])
+    
+    sub_oranges = np.where(np.abs(orange_zs) <= 0.6)[0]
+    orange_x_corrections = results_to_save['model_orange_x_axial_correction'](orange_zs[sub_oranges])
+    orange_y_corrections = results_to_save['model_orange_y_axial_correction'](orange_zs[sub_oranges])
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d') 
+
+    ax.scatter(orange_xs[sub_oranges] - orange_x_corrections, orange_ys[sub_oranges] - orange_y_corrections, orange_zs[sub_oranges], 'c', label = 'With Correction')
+    ax.legend()
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d') 
+
+    ax.scatter(red_xs[sub_reds] - red_x_corrections, red_ys[sub_reds] - red_y_corrections, red_zs[sub_reds], 'c', label = 'With Correction')
     ax.legend()
