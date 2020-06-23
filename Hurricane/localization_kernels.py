@@ -49,7 +49,7 @@ extern "C"
 	}
     
     if( index < images){ // ensure that the thread is working on a molecule
-        double fits[6] = {0, 0, 0, 1.3, 1.3, 200}; // preallocate fitting array
+        double fits[6] = {0, 0, 0, 1.5, 1.5, 200}; // preallocate fitting array
         double psf[pix*pix];
         double pi = 3.14159265358979323846; // close enough
         
