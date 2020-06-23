@@ -36,11 +36,11 @@ def simulate_psf_array(N = 100, pix = 5):
         truths[i,2] = np.random.uniform(1000, 3000) # Photons
         ind = np.random.randint(0,orange.shape[1]) # Because we're selecting from a curve, we choose a random position
         if truths[i,0] <= loc1.split: # determine calibration based off position
-            truths[i,3] = orange[1,ind]/loc1.pixel_size
-            truths[i,4] = orange[2,ind]/loc1.pixel_size
+            truths[i,3] = orange[1,ind]
+            truths[i,4] = orange[2,ind]
         else:
-            truths[i,3] = red[1,ind]/loc1.pixel_size
-            truths[i,4] = red[2,ind]/loc1.pixel_size
+            truths[i,3] = red[1,ind]
+            truths[i,4] = red[2,ind]
         truths[i,3] += np.random.normal(0,0.001) 
         truths[i,4] += np.random.normal(0,0.001) # Make some noise!
         truths[i,5] = np.random.uniform(1, 3) # Offset
@@ -72,9 +72,9 @@ class Localizations:
         self.sy_error = np.array([])
         # Load Calibration Files
         cal_fpath = 'C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\'
-        self.cal_files = [cal_fpath + '3d_calibration.pkl',  # Matlab axial calibration
+        self.cal_files = [cal_fpath + 'z_calib.mat',  # Matlab axial calibration
                           cal_fpath + '2_color_calibration.mat',  # 2 color calibration
-                          cal_fpath + 'z_calib.mat'] # Python 3D axial Calibration
+                          cal_fpath + '3d_calibration.pkl'] # Python 3D axial Calibration
 
         self.store_calibration_values() 
         
@@ -127,6 +127,12 @@ class Localizations:
         self.sx_error = self.pixel_size*crlb_vectors[:,3]**0.5
     
     def make_z_corrections(self):
+        '''Make astigmatism tilt based correction'''
+        orange_x_int = interp1d(self.orange_z_tilt, self.orange_x_tilt)
+        orange_y_int = interp1d(self.orange_z_tilt, self.orange_y_tilt)
+        
+        red_x_int = interp1d(self.red_z_tilt, self.red_x_tilt)
+        red_y_int = interp1d(self.red_z_tilt, self.red_y_tilt)
         
         for i in range(self.xf.shape[0]):
             
@@ -138,14 +144,39 @@ class Localizations:
                 self.xf[i] -= self.model_red_x_axial_correction(self.xf[i])
                 self.yf[i] -= self.model_red_y_axial_correction(self.yf[i])
                 self.zf[i] /= self.red_refraction_correction
-
+            ''' matlab correction
+            if self.color[i]:
+                self.xf[i] -= self.pixel_size*orange_x_int(self.xf[i])
+                self.yf[i] -= self.pixel_size*orange_y_int(self.yf[i])
+                self.zf[i] /= self.orange_refraction_correction
+            else:
+                self.xf[i] -= self.pixel_size*red_x_int(self.xf[i])
+                self.yf[i] -= self.pixel_size*red_y_int(self.yf[i])
+                self.zf[i] /= self.red_refraction_correction
+            '''
         
     def get_z_from_widths(self):
         # Depending on color, we should load either orange or red z params
         x = np.linspace(-0.8,0.8,1600) # gives nanometer level resolution, well below actual resolution
         orange_sigma_x_curve = self.model_orange_sx(x)
         orange_sigma_y_curve = self.model_orange_sy(x)
- 
+        ''' matlab calibration
+        # Build curve for orange calibration
+        xs = self.orange_z_calibration[0]
+        gx = self.orange_z_calibration[1]
+        dx = self.orange_z_calibration[2]
+        ax = self.orange_z_calibration[3]
+        bx = self.orange_z_calibration[4]
+        
+        ys = self.orange_z_calibration[5]
+        gy = self.orange_z_calibration[6]
+        dy = self.orange_z_calibration[7]
+        ay = self.orange_z_calibration[8]
+        by = self.orange_z_calibration[9]
+        
+        orange_sigma_x_curve = self.pixel_size*xs*(1 + ((x-gx)/dx)**2 + ax*((x-gx)/dx)**3 + bx*((x-gx)/dx)**4)**0.5
+        orange_sigma_y_curve = self.pixel_size*ys*(1 + ((x-gy)/dy)**2 + ay*((x-gy)/dy)**3 + by*((x-gy)/dy)**4)**0.5
+        '''
         fig = plt.figure()
         ax = fig.add_subplot(111)
         ax.scatter(x, orange_sigma_x_curve)
@@ -153,7 +184,25 @@ class Localizations:
         ax.set_xlabel('Axial Position in um')
         ax.set_ylabel('Sigma Width Position in um')
         fig.show()
-
+        '''
+        # Repeat for red curves
+        xs = self.red_z_calibration[0]
+        gx = self.red_z_calibration[1]
+        dx = self.red_z_calibration[2]
+        ax = self.red_z_calibration[3]
+        bx = self.red_z_calibration[4]
+        
+        ys = self.red_z_calibration[5]
+        gy = self.red_z_calibration[6]
+        dy = self.red_z_calibration[7]
+        ay = self.red_z_calibration[8]
+        by = self.red_z_calibration[9]
+        
+        red_sigma_x_curve = self.pixel_size*xs*(1 + ((x-gx)/dx)**2 + ax*((x-gx)/dx)**3 + bx*((x-gx)/dx)**4)**0.5
+        red_sigma_y_curve = self.pixel_size*ys*(1 + ((x-gy)/dy)**2 + ay*((x-gy)/dy)**3 + by*((x-gy)/dy)**4)**0.5
+        
+        del xs, gx, dx, ax, bx, ys, gy, dy, ay, by
+        '''
         red_sigma_x_curve = self.model_red_sx(x)
         red_sigma_y_curve = self.model_red_sy(x)
         ax = fig.add_subplot(111)
@@ -166,40 +215,83 @@ class Localizations:
                     index = np.argwhere(D == D.min())
                     self.zf[i] = x[index[0][0]]
                 else:
-                    self.zf[i] = -1
+                    self.zf[i] = -0.501
             if ~self.color[i]: # If molecule was found in the orange channel, use orange calibration parameters
                 D = ((self.sx[i]**0.5 - red_sigma_x_curve**0.5)**2 +(self.sy[i]**0.5 - red_sigma_y_curve**0.5)**2)**0.5
                 if ~np.isnan(D.min()):
                     index = np.argwhere(D == D.min())
-                    self.zf[i] = x[index[0][0]]
+                    self.zf[i] = -x[index[0][0]]
                 else:
-                    self.zf[i] = -1
+                    self.zf[i] = -0.501
                      
     def get_sigma_curves(self):
         # Depending on color, we should load either orange or red z params
         x = np.linspace(-0.5,0.5,1000) # gives nanometer level resolution, well below actual resolution
-        
         orange_sigma_x_curve = self.model_orange_sx(x)
         orange_sigma_y_curve = self.model_orange_sy(x)
-        red_sigma_x_curve = self.model_red_sx(x)
-        red_sigma_y_curve = self.model_red_sy(x)
+        red_sigma_x_curve =
+        red_sigma_y_curve = 
+        '''
+        # Build curve for orange calibration
+        xs = self.orange_z_calibration[0]
+        gx = self.orange_z_calibration[1]
+        dx = self.orange_z_calibration[2]
+        ax = self.orange_z_calibration[3]
+        bx = self.orange_z_calibration[4]
         
-        orange_sigma_curves = np.array([x, 
-                                        orange_sigma_x_curve, 
-                                        orange_sigma_y_curve])
-        red_sigma_curves = np.array([x, 
-                                     red_sigma_x_curve, 
-                                     red_sigma_y_curve])
+        ys = self.orange_z_calibration[5]
+        gy = self.orange_z_calibration[6]
+        dy = self.orange_z_calibration[7]
+        ay = self.orange_z_calibration[8]
+        by = self.orange_z_calibration[9]
         
-        return orange_sigma_curves, red_sigma_curves
+        orange_sigma_x_curve = xs*(1 + ((x-gx)/dx)**2 + ax*((x-gx)/dx)**3 + bx*((x-gx)/dx)**4)**0.5
+        orange_sigma_y_curve = ys*(1 + ((x-gy)/dy)**2 + ay*((x-gy)/dy)**3 + by*((x-gy)/dy)**4)**0.5
+       
+        # Repeat for red curves
+        xs = self.red_z_calibration[0]
+        gx = self.red_z_calibration[1]
+        dx = self.red_z_calibration[2]
+        ax = self.red_z_calibration[3]
+        bx = self.red_z_calibration[4]
+        
+        ys = self.red_z_calibration[5]
+        gy = self.red_z_calibration[6]
+        dy = self.red_z_calibration[7]
+        ay = self.red_z_calibration[8]
+        by = self.red_z_calibration[9]
+        
+        red_sigma_x_curve = xs*(1 + ((x-gx)/dx)**2 + ax*((x-gx)/dx)**3 + bx*((x-gx)/dx)**4)**0.5
+        red_sigma_y_curve = ys*(1 + ((x-gy)/dy)**2 + ay*((x-gy)/dy)**3 + by*((x-gy)/dy)**4)**0.5
+        '''
+        return np.array([x, orange_sigma_x_curve, orange_sigma_y_curve]), np.array([x, red_sigma_x_curve, red_sigma_y_curve])
         
     def store_calibration_values(self):
         
         #Store axial Calibration file into memory
         # Calibrations based off matlab file
-       
+        mat_dict = loadmat(self.cal_files[0])
+        orange = mat_dict['orange']
+        self.orange_z_calibration = orange[0][0][0][0]
+        self.orange_angle = orange[0][0][3][0][0]
+        #self.orange_refraction_tilt = orange[0][0][1][0][0]   
+        self.orange_x_tilt = orange[0][0][2][0][0][0][0]
+        self.orange_y_tilt = orange[0][0][2][0][0][1][0]
+        orange_z0_tilt = orange[0][0][2][0][0][2][0]
+        self.orange_z_tilt = orange_z0_tilt[1:] + np.mean(np.diff(orange_z0_tilt))/2
+        
+        orange = mat_dict['red']
+        self.red_z_calibration = orange[0][0][0][0]
+        
+        self.red_refraction_tilt = orange[0][0][1][0][0]   
+        self.red_x_tilt = orange[0][0][2][0][0][0][0]
+        self.red_y_tilt = orange[0][0][2][0][0][1][0]
+        red_z0_tilt = orange[0][0][2][0][0][2][0]
+        #self.red_angle = orange[0][0][3][0][0]
+        self.red_z_tilt = red_z0_tilt[1:] + np.mean(np.diff(red_z0_tilt))/2
+        
         # python 3D Calibration 
-        with open(self.cal_files[0], 'rb') as f:
+        with open(self.cal_files[2], 'rb') as f:
             calibration_dict = pickle.load(f)
         self.model_orange_sx = calibration_dict['model_orange_sx']
         self.model_orange_sy = calibration_dict['model_orange_sy']
@@ -256,7 +348,7 @@ if __name__ == '__main__':
     
     loc1 = Localizations('Example')
     loc1.split = 0
-    psfs, truths = simulate_psf_array(10000)
+    psfs, truths = simulate_psf_array(1000)
     fits = fit_psf_array_on_gpu(psfs)
     fits[:,3:4] = np.abs(fits[:,3:4])
     list_of_good_fits = remove_bad_fits(fits)

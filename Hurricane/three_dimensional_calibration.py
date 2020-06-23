@@ -19,6 +19,7 @@ from localization_kernels import *
 from rolling_ball_subtraction import *
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
+import pickle
 
 def collect_psfs_from_folders(folder, pixel_width = 5):
     '''This section takes in an image file, performs the regular pre-localization
@@ -356,6 +357,8 @@ if __name__ == '__main__':
     red_ys = np.array([])
     red_zs = np.array([])
     orange_zs = np.array([])
+    orange_frames = np.array([])
+    red_frames = np.array([])
     for i in range(len(locs)):
         loc = locs[i]
         if color[i]:
@@ -377,10 +380,12 @@ if __name__ == '__main__':
             orange_xs = np.append(orange_xs,loc.xf)
             orange_ys = np.append(orange_ys,loc.yf)
             orange_zs = np.append(orange_zs,loc.zf)
+            orange_frames = np.append(orange_frames,loc.frames)
         else:
             red_xs = np.append(red_xs,loc.xf)
             red_ys = np.append(red_ys,loc.yf)
             red_zs = np.append(red_zs,loc.zf)
+            red_frames = np.append(red_frames,loc.frames)
             
     # At this point, locs coords have been updated such the the 'cofocal' region of these curves are centered at (0,0,0) um
     fig = plt.figure()
@@ -389,7 +394,7 @@ if __name__ == '__main__':
     ax.scatter(red_xs, red_ys, red_zs, 'r', label = 'Red')
     ax.scatter(orange_xs, orange_ys, orange_zs, 'b', label = 'Orange')
     ax.legend()
-    
+    #%%
     orange_search_zs = np.linspace(orange_zs.min(),orange_zs.max(),20)
     orange_spline_xs = np.empty(orange_search_zs.shape[0] -1)
     orange_spline_ys = np.empty(orange_search_zs.shape[0] -1)
@@ -408,7 +413,7 @@ if __name__ == '__main__':
         orange_spline_zs[i] = Z_set[within_range].mean()
 
     
-    orange_search_zs = np.linspace(red_zs.min(),red_zs.max(),20)
+    red_search_zs = np.linspace(red_zs.min(),red_zs.max(),20)
     red_spline_xs = np.empty(red_search_zs.shape[0] -1)
     red_spline_ys = np.empty(red_search_zs.shape[0] -1)
     red_spline_zs = np.empty(red_search_zs.shape[0] -1)
@@ -451,17 +456,29 @@ if __name__ == '__main__':
     orange_spline_ys = gaussian_filter1d(orange_spline_ys, 1)
     
     # Save results as interpolations to the results dictionary
-    results_to_save['model_orange_x_axial_correction'] = interp1d(orange_spline_zs, orange_spline_xs, kind = 'cubic')
-    results_to_save['model_orange_y_axial_correction'] = interp1d(orange_spline_zs, orange_spline_ys, kind = 'cubic')
-    results_to_save['model_red_x_axial_correction'] = interp1d(red_spline_zs, red_spline_xs, kind = 'cubic')
-    results_to_save['model_red_y_axial_correction'] = interp1d(red_spline_zs, red_spline_ys, kind = 'cubic')
+    results_to_save['model_orange_x_axial_correction'] = interp1d(orange_spline_zs, 
+                                                                  orange_spline_xs, 
+                                                                  kind = 'cubic',
+                                                                  bounds_error = False)
+    results_to_save['model_orange_y_axial_correction'] = interp1d(orange_spline_zs, 
+                                                                  orange_spline_ys, 
+                                                                  kind = 'cubic',
+                                                                  bounds_error = False)
+    results_to_save['model_red_x_axial_correction'] = interp1d(red_spline_zs, 
+                                                               red_spline_xs, 
+                                                               kind = 'cubic',
+                                                               bounds_error = False)
+    results_to_save['model_red_y_axial_correction'] = interp1d(red_spline_zs, 
+                                                               red_spline_ys, 
+                                                               kind = 'cubic',
+                                                               bounds_error = False)
     
     
-    sub_reds = np.where(np.abs(red_zs) <= 0.4)[0]
+    sub_reds = np.argwhere(np.abs(red_zs) <= 0.8)
     red_x_corrections = results_to_save['model_red_x_axial_correction'](red_zs[sub_reds])
     red_y_corrections = results_to_save['model_red_y_axial_correction'](red_zs[sub_reds])
     
-    sub_oranges = np.where(np.abs(orange_zs) <= 0.6)[0]
+    sub_oranges = np.argwhere(np.abs(orange_zs) <= 1)
     orange_x_corrections = results_to_save['model_orange_x_axial_correction'](orange_zs[sub_oranges])
     orange_y_corrections = results_to_save['model_orange_y_axial_correction'](orange_zs[sub_oranges])
     
@@ -476,3 +493,19 @@ if __name__ == '__main__':
 
     ax.scatter(red_xs[sub_reds] - red_x_corrections, red_ys[sub_reds] - red_y_corrections, red_zs[sub_reds], 'c', label = 'With Correction')
     ax.legend()
+
+    # Take into account the index of refraction mismatch by plotting measured Z versus known Z
+    orange_index = np.argwhere(np.abs(orange_frames*0.02 - 1) <= 0.25)
+    orange_refraction_correction = np.polyfit(orange_frames[orange_index[:,0]]*0.02,
+                                              orange_zs[orange_index[:,0]], 
+                                              1)[0]
+    red_index = np.argwhere(np.abs(red_frames*0.02 - 1) <= 0.25)
+    red_refraction_correction = np.polyfit(red_frames[red_index[:,0]]*0.02,
+                                              red_zs[red_index[:,0]], 
+                                              1)[0]
+    orange_zs /= orange_refraction_correction
+    red_zs /= red_refraction_correction
+    results_to_save['orange_refraction_correction'] = orange_refraction_correction
+    results_to_save['red_refraction_correction'] = red_refraction_correction
+    with open('C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\3d_calibration.pkl', 'wb') as f:
+        pickle.dump(results_to_save,f)
