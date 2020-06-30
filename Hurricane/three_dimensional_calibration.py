@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 Title: 3D Calibration for Super-res
-
 Concept: We assume that all files in a given folder are meant to help with the 
 calibration process, this allows us to build a batch of localizations
-
 Data: Raw Camera frames of latex-beads where each frame is displaced axially
 by a known amount. Takes entire folder as a single dataset
-
 Created on Mon Jun  8 09:16:14 2020
-
 @author: Andrew Nelson
 """
 #%% Import Libraries
@@ -184,7 +180,7 @@ def get_fitting_data(psfs, orange_angle, red_angle, color, offset_index):
         loc.zf = loc.frames*step_size_in_nanometer/1000 # store Z position as defined by experiment
     return locs
 
-def correlate_axial_curves(locs, color):
+def correlate_axial_curves(locs, color, step_size_in_nanometer = 20):
     successful_fits = []
     #%% Show some Z stuff
     for i in range(len(psfs)):
@@ -236,11 +232,14 @@ def correlate_axial_curves(locs, color):
         
         
         # Perform a linear fit to the data
-        reference_model = np.polyfit(reference_sigma_segment, reference_time, 1)
-        current_model = np.polyfit(current_sigma_segment, current_time,  1)
-        
-        loc.frame_offset = round((reference_model[1] - current_model[1]))
-        loc.zf = ((loc.frames + loc.frame_offset)*20/1000)
+        try:
+            reference_model = np.polyfit(reference_sigma_segment, reference_time, 1)
+            current_model = np.polyfit(current_sigma_segment, current_time,  1)
+            
+            loc.frame_offset = round((reference_model[1] - current_model[1]))
+        except:
+            loc.frame_offset = 0
+        loc.zf = ((loc.frames + loc.frame_offset)*step_size_in_nanometer/1000)
 
 def build_axial_sigma_models(locs, results_to_save, color):
     red_molecules = np.argwhere(color == 0)
@@ -319,6 +318,7 @@ def build_axial_sigma_models(locs, results_to_save, color):
 #%% Main Workspace
 if __name__ == '__main__':
     fpath = 'D:\\Dropbox\\Data\\1-6-20 channel calibration\\zscan\\'
+    #fpath = 'D:\\Dropbox\\Data\\6-23-20 calibrations\\Pre_prepped_images\\'
     # We are storing regularly used values in the localization class
     step_size_in_nanometer = 20
     psfs, offset_index, color = collect_psfs_from_folders(fpath)
@@ -335,7 +335,7 @@ if __name__ == '__main__':
     # Fit those PSFs
     locs = get_fitting_data(psfs, orange_angle, red_angle, color, offset_index)
     
-    correlate_axial_curves(locs, color) 
+    correlate_axial_curves(locs, color, step_size_in_nanometer) 
     
     build_axial_sigma_models(locs, results_to_save, color)
     
@@ -509,3 +509,4 @@ if __name__ == '__main__':
     results_to_save['red_refraction_correction'] = red_refraction_correction
     with open('C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\3d_calibration.pkl', 'wb') as f:
         pickle.dump(results_to_save,f)
+

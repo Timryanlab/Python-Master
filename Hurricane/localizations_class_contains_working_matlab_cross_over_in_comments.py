@@ -136,15 +136,7 @@ class Localizations:
         
         for i in range(self.xf.shape[0]):
             
-            if self.color[i]:
-                self.xf[i] -= self.model_orange_x_axial_correction(self.xf[i])
-                self.yf[i] -= self.model_orange_y_axial_correction(self.yf[i])
-                self.zf[i] /= self.orange_refraction_correction
-            else:
-                self.xf[i] -= self.model_red_x_axial_correction(self.xf[i])
-                self.yf[i] -= self.model_red_y_axial_correction(self.yf[i])
-                self.zf[i] /= self.red_refraction_correction
-            ''' matlab correction
+            
             if self.color[i]:
                 self.xf[i] -= self.pixel_size*orange_x_int(self.xf[i])
                 self.yf[i] -= self.pixel_size*orange_y_int(self.yf[i])
@@ -153,14 +145,12 @@ class Localizations:
                 self.xf[i] -= self.pixel_size*red_x_int(self.xf[i])
                 self.yf[i] -= self.pixel_size*red_y_int(self.yf[i])
                 self.zf[i] /= self.red_refraction_correction
-            '''
+            
         
     def get_z_from_widths(self):
         # Depending on color, we should load either orange or red z params
         x = np.linspace(-0.8,0.8,1600) # gives nanometer level resolution, well below actual resolution
-        orange_sigma_x_curve = self.model_orange_sx(x)
-        orange_sigma_y_curve = self.model_orange_sy(x)
-        ''' matlab calibration
+        
         # Build curve for orange calibration
         xs = self.orange_z_calibration[0]
         gx = self.orange_z_calibration[1]
@@ -202,12 +192,7 @@ class Localizations:
         red_sigma_y_curve = self.pixel_size*ys*(1 + ((x-gy)/dy)**2 + ay*((x-gy)/dy)**3 + by*((x-gy)/dy)**4)**0.5
         
         del xs, gx, dx, ax, bx, ys, gy, dy, ay, by
-        '''
-        red_sigma_x_curve = self.model_red_sx(x)
-        red_sigma_y_curve = self.model_red_sy(x)
-        ax = fig.add_subplot(111)
-        ax.scatter(x, red_sigma_x_curve)
-        ax.scatter(x, red_sigma_y_curve)
+        
         for i in range(len(self.xf)):
             if self.color[i]: # If molecule was found in the orange channel, use orange calibration parameters
                 D = ((self.sx[i]**0.5 - orange_sigma_x_curve**0.5)**2 +(self.sy[i]**0.5 - orange_sigma_y_curve**0.5)**2)**0.5
@@ -227,11 +212,7 @@ class Localizations:
     def get_sigma_curves(self):
         # Depending on color, we should load either orange or red z params
         x = np.linspace(-0.5,0.5,1000) # gives nanometer level resolution, well below actual resolution
-        orange_sigma_x_curve = self.model_orange_sx(x)
-        orange_sigma_y_curve = self.model_orange_sy(x)
-        red_sigma_x_curve =
-        red_sigma_y_curve = 
-        '''
+        
         # Build curve for orange calibration
         xs = self.orange_z_calibration[0]
         gx = self.orange_z_calibration[1]
@@ -263,7 +244,7 @@ class Localizations:
         
         red_sigma_x_curve = xs*(1 + ((x-gx)/dx)**2 + ax*((x-gx)/dx)**3 + bx*((x-gx)/dx)**4)**0.5
         red_sigma_y_curve = ys*(1 + ((x-gy)/dy)**2 + ay*((x-gy)/dy)**3 + by*((x-gy)/dy)**4)**0.5
-        '''
+        
         return np.array([x, orange_sigma_x_curve, orange_sigma_y_curve]), np.array([x, red_sigma_x_curve, red_sigma_y_curve])
         
     def store_calibration_values(self):

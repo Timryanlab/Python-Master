@@ -54,7 +54,7 @@ def simulate_psf_array(N = 100, pix = 5):
 
 #%% Localization Class
 class Localizations:
-    def __init__(self, file_name='temp_name.tif', pixel_size = 0.13, pixel_width = 5):
+    def __init__(self, file_name='', pixel_size = 0.13, pixel_width = 5):
         self.name = file_name
         self.xf = np.array([])
         self.yf = np.array([])
@@ -122,7 +122,6 @@ class Localizations:
                                        # False = Red channel True = Orange Channel
         self.get_z_from_widths() # Z assignment
         self.make_z_corrections() # X-Y corrections based on astigmatism tilt
-        
         self.xf_error = self.pixel_size*crlb_vectors[:,0]**0.5
         self.yf_error = self.pixel_size*crlb_vectors[:,1]**0.5
         self.sx_error = self.pixel_size*crlb_vectors[:,3]**0.5
@@ -132,12 +131,12 @@ class Localizations:
         for i in range(self.xf.shape[0]):
             
             if self.color[i]:
-                self.xf[i] -= self.model_orange_x_axial_correction(self.zf[i])
-                self.yf[i] -= self.model_orange_y_axial_correction(self.zf[i])
+                self.xf[i] -= self.model_orange_x_axial_correction(self.xf[i])
+                self.yf[i] -= self.model_orange_y_axial_correction(self.yf[i])
                 self.zf[i] /= self.orange_refraction_correction
             else:
-                self.xf[i] -= self.model_red_x_axial_correction(self.zf[i])
-                self.yf[i] -= self.model_red_y_axial_correction(self.zf[i])
+                self.xf[i] -= self.model_red_x_axial_correction(self.xf[i])
+                self.yf[i] -= self.model_red_y_axial_correction(self.yf[i])
                 self.zf[i] /= self.red_refraction_correction
 
         
@@ -217,24 +216,29 @@ class Localizations:
         """This makes the overlay correction between the channels in X and Y, soon to be Z"""
         self.xf_red = self.xf[~self.color]
         self.yf_red = self.yf[~self.color]
-        self.zf_red = self.zf[~self.color]
-        self.xf_orange = self.xf[self.color]/self.pixel_size
-        self.yf_orange = self.yf[self.color]/self.pixel_size
-        self.zf_orange = self.zf[self.color]
-        self.x = np.array([self.xf_orange**3, 
-                         self.yf_orange**3, 
-                         self.xf_orange**2*self.yf_orange, 
-                         self.xf_orange*self.yf_orange**2,
-                         self.xf_orange**2, 
+        self.x = np.array([self.xf[self.color]**3, 
+                         self.yf[self.color]**3, 
+                         self.xf[self.color]**2*self.yf[self.color], 
+                         self.xf[self.color]*self.yf[self.color]**2,
+                         self.xf[self.color]**2, 
                          self.yf[self.color]**2,
-                         self.xf_orange*self.yf_orange,
-                         self.xf_orange, 
-                         self.yf_orange,
-                         self.xf_orange*0 + 1])
-        self.xf_orange = np.matmul(self.orange_2_red_x_weights,self.x)*self.pixel_size
-        self.yf_orange = np.matmul(self.orange_2_red_y_weights,self.x)*self.pixel_size
+                         self.xf[self.color]*self.yf[self.color],
+                         self.xf[self.color], 
+                         self.yf[self.color],
+                         self.xf[self.color]*0 + 1])
+        self.xf_orange = np.matmul(self.orange_2_red_x_weights,self.x)
+        self.yf_orange = np.matmul(self.orange_2_red_y_weights,self.x)
     
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d') 
+    
+        ax.scatter(self.xf_red, self.yf_red, self.zf[~self.color])
+        ax.scatter(self.xf_orange, self.yf_orange, self.zf[self.color])
         
+        ax.set_xlabel('X um')
+        ax.set_ylabel('Y um')
+        ax.set_zlabel('Z um')
+        fig.show()    
         
 #% Main Workspace
 if __name__ == '__main__':

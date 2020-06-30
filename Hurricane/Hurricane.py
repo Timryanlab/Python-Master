@@ -13,15 +13,11 @@ from ryan_image_io import *
 from rolling_ball_subtraction import *
 from localization_kernels import *
 from numba import cuda
-from numba import vectorize, float64
 import numpy as np
 from scipy.special import erf
 import matplotlib.pyplot as plt
-import os
 from localizations_class import *
-import time
-import pandas as pd
-
+import open3d as o3d
 # Defintions for GPU codes to double precision
 EXP = 2.71828182845904523536028747135
 PI  = 3.14159265358979311599796346854
@@ -544,6 +540,7 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
     pixels = m*n*o
     molecules = Localizations()
     angs = np.array([molecules.red_angle, molecules.orange_angle])
+    print(angs)
     if pixels <= LOCALIZE_LIMIT:
         # run the localization in one chunk
         fits, crlbs, frames  =localize_image_slices(images, 
@@ -564,7 +561,7 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
         for i in range(rounds): # Loop over number of times needed to chunk through data set
             # Ensure we don't go over our stack size
             stride = np.min((o,(i+1)*chunk)) 
-            print(i*chunk, stride, o)
+            print(i*chunk*100/o)
             #Parse the image into a subset
             sub_images = images[:,:,i*chunk:stride]
             slice_fits, slice_crlbs, slice_frames  = localize_image_slices(sub_images, 
@@ -666,7 +663,7 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     centers = count_peaks(peaks, blanking)
     hot_pixels = centers.shape[0] # number of areas found to localize
     # Set up device memory for next round of computation
-    print(split)
+    
     d_rotation = cp.array([angs[int(centers[i,1] <= split)] for i in range(hot_pixels)])# determine the 'color' of the molecule based on it's initial location
     #print([angs[centers[i,1] <= split] for i in range(hot_pixels)])
     d_centers = send_to_device(centers)
@@ -701,6 +698,9 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     
     return keep_vectors, crlb_vectors, frames
     
+def save_localizations(localizations, file_name):
+    with open(file_name[:-4] + '_localized.pkl', 'wb') as f:
+        pickle.dump(localizations,f)
         
 #%% Main Workspace
 if __name__ == '__main__':
@@ -708,7 +708,7 @@ if __name__ == '__main__':
     fname = "cell10_dz20_r2.tif" # File name
     
     file_name = fpath + fname
-    '''
+
     result =  localize_image_stack(file_name, 
                                     pixel_size = 0.130, 
                                     gauss_sigma = 2.5, 
@@ -719,8 +719,35 @@ if __name__ == '__main__':
                                     threshold = 35,
                                     start = 0,
                                     finish = 0)
-    result.show_localizations()
-    result.show_axial_sigma_curve()'''
+    result.separate_colors()
+    save_localizations(result, file_name)
+    xyz = np.empty((result.xf.shape[0],3))
+    #orange_xyz = np.empty((result.color.sum(),3))
+    point_colors = np.empty((result.xf.shape[0],3))
+    for i in range(result.xf_orange.shape[0]):
+        xyz[i,0] = result.xf_orange[i] 
+        xyz[i,1] = result.yf_orange[i]
+        xyz[i,2] = result.zf_orange[i]
+        point_colors[i,:] = [0, 0, 1]
+    
+    for i in range(result.xf_red.shape[0]):
+        ii = i + result.xf_orange.shape[0]
+        xyz[ii,0] = result.xf_red[i] 
+        xyz[ii,1] = result.yf_red[i]
+        xyz[ii,2] = result.zf_red[i]
+        point_colors[ii,:] = [1, 0, 0]        
+    
+    index_of_numbers = np.isfinite(xyz[:,0])
+    selected_point_colors = point_colors[index_of_numbers,:]
+    selected_xyz = xyz[index_of_numbers,:]
+    pcd = o3d.geometry.PointCloud()
+    
+    pcd.points = o3d.utility.Vector3dVector(selected_xyz)
+    pcd.colors = o3d.utility.Vector3dVector(selected_point_colors)
+    o3d.visualization.draw_geometries([pcd])
+    
+    
+    
     '''
     psfs, truths = simulate_psf_array(1000)
     fits =  fit_psf_array(psfs)
@@ -775,3 +802,4 @@ if __name__ == '__main__':
     #%% GPU Fitting Section
     fit_gpu = fit_psf_array_on_gpu(psf_image_array, 0 , 20)
     '''
+    
