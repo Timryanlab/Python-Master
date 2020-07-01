@@ -18,6 +18,7 @@ from scipy.special import erf
 import matplotlib.pyplot as plt
 from localizations_class import *
 import open3d as o3d
+import pickle
 # Defintions for GPU codes to double precision
 EXP = 2.71828182845904523536028747135
 PI  = 3.14159265358979311599796346854
@@ -143,7 +144,7 @@ def count_peaks(peak_image, blanking = 0, seperator = 190, pixel_width = 5):
     Returns a list representing the high pixel of likely molecular emissions
 
     """
-    # Create Apron to ensure no molecules near the periphery are selected
+    # Create Apron to ensure no rois near the periphery are selected
     peak_image[:pixel_width+1,:,:] = False
     peak_image[:,:pixel_width+1,:] = False
     peak_image[-pixel_width-1:,:,:] = False
@@ -546,7 +547,6 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
     pixels = m*n*o
     molecules = Localizations()
     angs = np.array([molecules.red_angle, molecules.orange_angle])
-    print(angs)
     if pixels <= LOCALIZE_LIMIT:
         # run the localization in one chunk
         fits, crlbs, frames  =localize_image_slices(images, 
@@ -712,13 +712,47 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     
     return keep_vectors, crlb_vectors, frames
     
-def save_localizations(localizations, file_name):
-    with open(file_name[:-4] + '_localized.pkl', 'wb') as f:
-        pickle.dump(localizations,f)
+
+
+def localize_folder(folder):
+    # get list of image files
+    image_files = grab_image_files(fpath)
+    
+    for file in image_files:
+        file_name = fpath + file
+        result =  localize_image_stack(file_name, 
+                                    pixel_size = 0.130, 
+                                    gauss_sigma = 2.5, 
+                                    rolling_ball_radius = 6, 
+                                    rolling_ball_height = 6, 
+                                    pixel_width = 5, 
+                                    blanking = 2, 
+                                    threshold = 150,
+                                    start = 0,
+                                    finish = 0)
+        save_localizations(result, file_name)
         
 #%% Main Workspace
 if __name__ == '__main__':
-    fpath = "D:\\Dropbox\\Data\\6-24-20 actin in BEAs\\life_act\\" # Folder
+    fpath = "C:\\Users\\AJN Lab\\Dropbox\\Data\\6-24-20 actin in BEAs\\life_act\\" # Folder
+    # get list of image files
+    image_files = grab_image_files(fpath)
+    
+    for file in image_files:
+        file_name = fpath + file
+        result =  localize_image_stack(file_name, 
+                                    pixel_size = 0.130, 
+                                    gauss_sigma = 2.5, 
+                                    rolling_ball_radius = 6, 
+                                    rolling_ball_height = 6, 
+                                    pixel_width = 5, 
+                                    blanking = 2, 
+                                    threshold = 150,
+                                    start = 0,
+                                    finish = 0)
+        save_localizations(result, file_name)
+    '''    
+    # go one by one through localization analysis and save the files
     fname = "BEA_cell_1_2.tif" # File name
     
     file_name = fpath + fname
@@ -732,7 +766,7 @@ if __name__ == '__main__':
                                     blanking = 2, 
                                     threshold = 35,
                                     start = 0,
-                                    finish = 0)
+                                    finish = 10)
     result.separate_colors()
     save_localizations(result, file_name)
     xyz = np.empty((result.xf.shape[0],3))
@@ -771,7 +805,7 @@ if __name__ == '__main__':
     pcd.points = o3d.utility.Vector3dVector(selected_xyz)
     pcd.colors = o3d.utility.Vector3dVector(selected_point_colors)
     o3d.visualization.draw_geometries([pcd])
-    
+    '''
     
     
     '''
