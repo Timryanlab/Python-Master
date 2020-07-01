@@ -58,7 +58,7 @@ def gpu_peaks(image_in, image_out, thresh, pixel_width):
     for ii in range(i-pixw,i+pixw):
         for jj in range(j-pixw,j+pixw):
             #Ensure that you are only about to look at an image pixel
-            if (ii >= 0) and (ii <m) and (jj>=0) and (jj <n):
+            if (ii >= 0) and (ii <m) and (jj>= 0) and (jj <n):
                 #Basic maximum pixel search, record index locations
                 if image_in[ii,jj,k] >= max_val:
                     max_val = image_in[ii,jj,k]
@@ -120,7 +120,7 @@ def gpu_image_segment(images, psf_image_array, centers, pixel_width):
             #psf_image_array[i,j,k] = k
 
 #%% Functions
-def count_peaks(peak_image, blanking = 0, seperator = 190):
+def count_peaks(peak_image, blanking = 0, seperator = 190, pixel_width = 5):
     """
     
 
@@ -143,6 +143,12 @@ def count_peaks(peak_image, blanking = 0, seperator = 190):
     Returns a list representing the high pixel of likely molecular emissions
 
     """
+    # Create Apron to ensure no molecules near the periphery are selected
+    peak_image[:pixel_width+1,:,:] = False
+    peak_image[:,:pixel_width+1,:] = False
+    peak_image[-pixel_width-1:,:,:] = False
+    peak_image[:,-pixel_width-1:,:] = False
+    
     centers = np.argwhere(peak_image>0)
     ind = np.argsort(centers[:,2])
     
@@ -654,8 +660,16 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     gpu_find_peaks(d_image_2, d_image_3, threshold, pixel_width)
     
     # Copy peak data back onto host
+    bkn_subbed = cp.asnumpy(d_image_2)
     peaks = cp.asnumpy(d_image_3)
-    
+    '''
+    bkn_subbed = cp.asnumpy(d_image_2)
+    show_as_image(bkn_subbed[:,:,0])
+    peaks[:pixel_width+1,:,:] = False
+    peaks[:,:pixel_width+1,:] = False
+    peaks[-pixel_width-1:,:,:] = False
+    peaks[:,-pixel_width-1:,:] = False
+    show_as_image(peaks[:,:,0])'''
     # Clean up GPU memory
     del d_image_3, d_images, d_kernel, d_sphere_kernel
     
@@ -704,8 +718,8 @@ def save_localizations(localizations, file_name):
         
 #%% Main Workspace
 if __name__ == '__main__':
-    fpath = "D:\\Dropbox\\Data\\3-3-20 glut4-vglutmeos\\" # Folder
-    fname = "cell10_dz20_r2.tif" # File name
+    fpath = "D:\\Dropbox\\Data\\6-24-20 actin in BEAs\\life_act\\" # Folder
+    fname = "BEA_cell_1_2.tif" # File name
     
     file_name = fpath + fname
 
@@ -725,17 +739,29 @@ if __name__ == '__main__':
     #orange_xyz = np.empty((result.color.sum(),3))
     point_colors = np.empty((result.xf.shape[0],3))
     for i in range(result.xf_orange.shape[0]):
-        xyz[i,0] = result.xf_orange[i] 
-        xyz[i,1] = result.yf_orange[i]
-        xyz[i,2] = result.zf_orange[i]
-        point_colors[i,:] = [0, 0, 1]
+        if np.abs(result.zf_orange[i]) <= 0.6:
+            xyz[i,0] = result.xf_orange[i] 
+            xyz[i,1] = result.yf_orange[i]
+            xyz[i,2] = result.zf_orange[i]
+            point_colors[i,:] = [0, 0, 1]
+        else:
+            xyz[i,0] = 0 
+            xyz[i,1] = 0
+            xyz[i,2] = 0
+            point_colors[i,:] = [0, 0, 1]
     
     for i in range(result.xf_red.shape[0]):
         ii = i + result.xf_orange.shape[0]
-        xyz[ii,0] = result.xf_red[i] 
-        xyz[ii,1] = result.yf_red[i]
-        xyz[ii,2] = result.zf_red[i]
-        point_colors[ii,:] = [1, 0, 0]        
+        if np.abs(result.zf_red[i]) <= 0.6:
+            xyz[ii,0] = result.xf_red[i] 
+            xyz[ii,1] = result.yf_red[i]
+            xyz[ii,2] = result.zf_red[i]
+            point_colors[ii,:] = [1, 0, 0]        
+        else:
+            xyz[ii,0] = 0 
+            xyz[ii,1] = 0
+            xyz[ii,2] = 0
+            point_colors[ii,:] = [0, 0, 1]
     
     index_of_numbers = np.isfinite(xyz[:,0])
     selected_point_colors = point_colors[index_of_numbers,:]
