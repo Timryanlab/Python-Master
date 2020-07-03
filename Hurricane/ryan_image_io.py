@@ -176,10 +176,11 @@ def save_array_to_tiff(array, file):
     if o > 1:
         for i in range(o):
             Im.append(Image.fromarray(array[:,:,i]))
+        Im[0].save(file, save_all=True,
+                   append_images=Im[1:])
     else:
-        Im = array
-    Im[0].save(file, save_all=True,
-               append_images=Im[1:])
+        Im = Image.fromarray(array)
+        Im.save(file, save_all=True)
     # This appears to work properly
     
 def show_as_image(image_frame, title = None):

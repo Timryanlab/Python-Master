@@ -747,7 +747,7 @@ if __name__ == '__main__':
                                     rolling_ball_height = 6, 
                                     pixel_width = 5, 
                                     blanking = 2, 
-                                    threshold = 150,
+                                    threshold = 70,
                                     start = 0,
                                     finish = 0)
         save_localizations(result, file_name)

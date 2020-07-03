@@ -55,7 +55,7 @@ def visualize_localizations(molecules):
 #%%
 if __name__ == '__main__':
     file_path = 'C:\\Users\\AJN Lab\\Dropbox\\Data\\6-24-20 actin in BEAs\\life_act\\'
-    file_name = 'BEA_cell_1_2_localized.pkl'
+    file_name = 'BEA_cell_4_localized.pkl'
     result = load_localizations(file_path + file_name)
     
     snr = np.empty((result.xf.shape))
