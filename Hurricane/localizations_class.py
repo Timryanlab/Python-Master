@@ -17,13 +17,17 @@ from mpl_toolkits.mplot3d import Axes3D
 import pickle
 
 #% Functions
-def simulate_psf_array(N = 100, pix = 5):
+def simulate_psf_array(N = 100, rot = 0, pix = 5):
     """So this will simulate a PSF array that when transferred to the GPU can be
     fit by the localization algorithm located in 'localization_kernels"""
     
     psf_image_array = np.zeros((2*pix+1,2*pix+1,N)) # Preallocate array
     x_build = np.linspace(-pix,pix,2*pix +1) # Get ready to make mesh grid
     X , Y = np.meshgrid(x_build, x_build) # mesh grid
+    X1 = np.cos(rot)*X - np.sin(rot)*Y
+    Y1 = np.sin(rot)*X + np.cos(rot)*Y
+    X = X1
+    Y = Y1
     truths = np.zeros((N,6)) # preallocate truths array
     loc1 = Localizations() # Grab calibration file values
     
@@ -31,8 +35,10 @@ def simulate_psf_array(N = 100, pix = 5):
     loc1.split = 0
     for i in range(N):
         # Start by Determining your truths
-        truths[i,0] = np.random.uniform(-0.5, 0.5)
-        truths[i,1] = np.random.uniform(-0.5, 0.5) # Position
+        truths[i,0] = np.random.uniform(-1, 1)
+        truths[i,1] = np.random.uniform(-1, 1) # Position
+        x = np.cos(rot)*truths[i,0] - np.sin(rot)*truths[i,1]
+        y = np.sin(rot)*truths[i,0] + np.cos(rot)*truths[i,1]
         truths[i,2] = np.random.uniform(1000, 3000) # Photons
         ind = np.random.randint(0,orange.shape[1]) # Because we're selecting from a curve, we choose a random position
         if truths[i,0] <= loc1.split: # determine calibration based off position
@@ -46,8 +52,8 @@ def simulate_psf_array(N = 100, pix = 5):
         truths[i,5] = np.random.uniform(1, 3) # Offset
         
         # Build your x/y guass components
-        x_gauss = 0.5 * (erf( (X - truths[i,0] + 0.5) / (np.sqrt(2 * truths[i,3]**2))) - erf( (X - truths[i,0] - 0.5) / (np.sqrt(2 * truths[i,3]**2))))
-        y_gauss = 0.5 * (erf( (Y - truths[i,1] + 0.5) / (np.sqrt(2 * truths[i,4]**2))) - erf( (Y - truths[i,1] - 0.5) / (np.sqrt(2 * truths[i,4]**2))))
+        x_gauss = 0.5 * (erf( (X - x + 0.5) / (np.sqrt(2 * truths[i,3]**2))) - erf( (X - x - 0.5) / (np.sqrt(2 * truths[i,3]**2))))
+        y_gauss = 0.5 * (erf( (Y - y + 0.5) / (np.sqrt(2 * truths[i,4]**2))) - erf( (Y - y - 0.5) / (np.sqrt(2 * truths[i,4]**2))))
         #print(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5]))
         psf_image_array[:,:,i] = np.random.poisson(np.round(truths[i,2]*x_gauss*y_gauss + truths[i,5])) # make some noise and return it
     return psf_image_array, truths
@@ -71,7 +77,7 @@ class Localizations:
         self.sx_error = np.array([])
         self.sy_error = np.array([])
         # Load Calibration Files
-        cal_fpath = 'C:\\Users\\AJN Lab\\Documents\\GitHub\\TR-Python-Master\\Hurricane\\'
+        cal_fpath = 'C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\'
         self.cal_files = [cal_fpath + '3d_calibration.pkl',  # Matlab axial calibration
                           cal_fpath + '2_color_calibration.mat',  # 2 color calibration
                           cal_fpath + 'z_calib.mat'] # Python 3D axial Calibration
@@ -250,14 +256,15 @@ if __name__ == '__main__':
     
     loc1 = Localizations('Example')
     loc1.split = 0
-    psfs, truths = simulate_psf_array(10000)
-    fits = fit_psf_array_on_gpu(psfs)
+    psfs, truths = simulate_psf_array(10000, rot = 0)
+    fits = fit_psf_array_on_gpu(psfs, rotation = np.pi/2)
     fits[:,3:4] = np.abs(fits[:,3:4])
     list_of_good_fits = remove_bad_fits(fits)
     keep_vectors = fits[list_of_good_fits,:]
     keep_psfs = psfs[:,:,list_of_good_fits]
     crlb_vectors = get_error_values(keep_psfs, keep_vectors)
     loc1.store_fits(keep_vectors, crlb_vectors, np.array(range(keep_vectors.shape[0])))
-    loc1.show_axial_sigma_curve()
-    
-    
+
+    kept_truths = truths[list_of_good_fits,:]
+    plt.hist(kept_truths[:,0] - keep_vectors[:,0], bins = 200)
+    (kept_truths[:,0] - keep_vectors[:,0]).std()

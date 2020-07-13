@@ -25,8 +25,8 @@ PI  = 3.14159265358979311599796346854
 
 
 LOCALIZE_LIMIT = 190*388*400
-#%% GPU Accelerated Code
-#%%
+# GPU Accelerated Code
+#
 """Begin GPU Code"""
 @cuda.jit()
 def gpu_peaks(image_in, image_out, thresh, pixel_width):
@@ -120,7 +120,7 @@ def gpu_image_segment(images, psf_image_array, centers, pixel_width):
             psf_image_array[i,j,k] = images[centers[k,0] + ii, centers[k,1] + jj, centers[k,2]]
             #psf_image_array[i,j,k] = k
 
-#%% Functions
+# Functions
 def count_peaks(peak_image, blanking = 0, seperator = 190, pixel_width = 5):
     """
     
@@ -155,7 +155,11 @@ def count_peaks(peak_image, blanking = 0, seperator = 190, pixel_width = 5):
     
     mols = centers.shape[0]
     if blanking ==0:
-        return centers
+        remover = []
+        for i in range(mols): # We'll loop over the list of centers and remove
+            if centers[ind[i],1] >= seperator: #Blanking the right frame  
+                remover.append(i) # If ID should be abandoned add index to list
+        return np.delete(centers[ind,:],remover,0)
     else:
         shift = 0 # Frame shifting variable that allows us to switch behavior between frames
         if blanking == 2: shift = 1 # If we want the first frame to blank on the right, we set shift to 1
@@ -563,7 +567,7 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
     else:
         rounds = pixels // LOCALIZE_LIMIT + 1# Divide into manageable sizes
         chunk = o // (rounds)   # Determine dividing chunk size of stacks
-        #%%
+        
         for i in range(rounds): # Loop over number of times needed to chunk through data set
             # Ensure we don't go over our stack size
             stride = np.min((o,(i+1)*chunk)) 
@@ -592,7 +596,7 @@ def localize_image_stack(file_name, pixel_size = 0.130, gauss_sigma = 2.5, rolli
 
     molecules.store_fits(fits, crlbs, frames)
     return molecules
-#%%
+
 def wavelet_denoising(images, levels = 3):
     """Images is the stack of images to denoise, levels tells the number of iterations for the denoising"""
     baselet = np.array([1/16, 1/4, 3/8, 1/4, 1/16])
@@ -616,7 +620,7 @@ def wavelet_denoising(images, levels = 3):
             image = np.copy(blurred_image) # use blurred image for the next
         out_images[:,:,frame] = waves[:,:,1]*np.where(waves[:,:,1] > 2, 1, 0) # we select the second size scale for psf detection
     return out_images
-#%%        
+        
 def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, rolling_ball_radius = 6, rolling_ball_height = 6, pixel_width = 5, blanking = 2, threshold = 35, split = 0, angs = np.array([0,0])):
     """
     Will use MLE localization algorithm to analyze images such that maximum uptime
@@ -674,7 +678,7 @@ def localize_image_slices(image_slice, pixel_size = 0.130, gauss_sigma = 2.5, ro
     del d_image_3, d_images, d_kernel, d_sphere_kernel
     
     # Start peak finding analysis
-    centers = count_peaks(peaks, blanking)
+    centers = count_peaks(peaks, blanking, seperator = split)
     hot_pixels = centers.shape[0] # number of areas found to localize
     # Set up device memory for next round of computation
     
@@ -734,19 +738,19 @@ def localize_folder(folder):
         
 #%% Main Workspace
 if __name__ == '__main__':
-    fpath = "C:\\Users\\AJN Lab\\Dropbox\\Data\\6-24-20 actin in BEAs\\life_act\\" # Folder
+    fpath = "D:\\Dropbox\\Data\\7-8-20 actin_in_beas\\lifeact\\" # Folder
     # get list of image files
     image_files = grab_image_files(fpath)
     
     for file in image_files:
-        file_name = fpath + file
+        file_name = fpath + 'cell_1_higher_power_dz_20_r_0_1.tif'
         result =  localize_image_stack(file_name, 
                                     pixel_size = 0.130, 
                                     gauss_sigma = 2.5, 
                                     rolling_ball_radius = 6, 
                                     rolling_ball_height = 6, 
                                     pixel_width = 5, 
-                                    blanking = 2, 
+                                    blanking = 0, 
                                     threshold = 70,
                                     start = 0,
                                     finish = 0)

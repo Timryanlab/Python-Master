@@ -73,23 +73,28 @@ if __name__ == '__main__':
     # Let's try to grab one state and plot it's covid history
     states = us_county_data_frame.state.unique() # Grab a list of all states in the data set
     dates = us_county_data_frame.str_date.unique()
+
+    us_county_data_frame.columns
     
     
-    state = 'NY'
+    state = 'FL'
     state_frames = us_county_data_frame.loc[us_county_data_frame['state'] == state]
-    # State frames is now a data frame comprised of 1 state's data
+   
     state_frames['daily_positives'] = np.diff(state_frames['positive'], prepend = 0)
+    state_frames['smooth_daily_positive'] = previous_day_average(np.diff(state_frames['positive'], prepend = 0))
     state_frames['daily_negatives'] = np.diff(state_frames['negative'], prepend = 0)
     state_frames['daily_tests'] = np.diff(state_frames['total'], prepend = 0)
     state_frames['daily_positive_per_test'] = state_frames['daily_positives']/state_frames['daily_tests']
+    state_frames['daily_deaths'] = np.diff(state_frames['death'], prepend = 0)
     ax = state_frames.plot(x = 'str_date', 
                            y = 'daily_positive_per_test', 
-                           label = 'Daily % of positive tests')
+                           label = 'Daily % of positive tests',
+                           kind = 'bar')
 
     ax2 = state_frames.plot(ax = ax,  
                            x = 'str_date', 
-                           y = 'daily_tests', 
-                           label = 'Number of Tests performed',
+                           y = 'daily_positives', 
+                           label = 'daily_positives',
                            secondary_y = True)
     h1, l1 = ax.get_legend_handles_labels()
     h2, l2 = ax.right_ax.get_legend_handles_labels()

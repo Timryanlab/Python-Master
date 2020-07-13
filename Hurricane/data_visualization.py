@@ -11,10 +11,11 @@ from localizations_class import *
 import pickle
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from rolling_ball_subtraction import *
 mpl.rcParams['agg.path.chunksize'] = 100000
 import open3d as o3d
 #%% Functions
-def visualize_localizations(molecules):
+def visualize_3d_localizations(molecules):
     molecules.separate_colors()
     xyz = np.empty((molecules.xf.shape[0],3))
     point_colors = np.empty((molecules.xf.shape[0],3))
@@ -51,15 +52,25 @@ def visualize_localizations(molecules):
     pcd.points = o3d.utility.Vector3dVector(selected_xyz)
     pcd.colors = o3d.utility.Vector3dVector(selected_point_colors)
     o3d.visualization.draw_geometries([pcd])
+
     
 #%%
 if __name__ == '__main__':
-    file_path = 'C:\\Users\\AJN Lab\\Dropbox\\Data\\6-24-20 actin in BEAs\\life_act\\'
-    file_name = 'BEA_cell_4_localized.pkl'
+    file_path = 'D:\\Dropbox\\Data\\7-8-20 actin_in_beas\\lifeact\\'
+    file_name = 'cell_1_higher_power_dz_20_r_0_1_localized.pkl'
     result = load_localizations(file_path + file_name)
     
     snr = np.empty((result.xf.shape))
     for i in range(len(snr)):
         snr[i] = result.N[i] / (result.N[i] + (result.pixel_width +1)**2*result.o[i])**0.5
     plt.hist(snr, bins = 100)
-    visualize_localizations(result)
+    image = load_image_to_array(file_path + 'cell_1_higher_power_dz_20_r_0_1.tif')
+    #%%
+    frame = 240
+    images_no_background, image_background = rolling_ball_subtraction(image,
+                                                               gauss_sigma = 2.5, 
+                                                               rolling_ball_radius = 6,
+                                                               rolling_ball_height= 6)
+    plt.imshow(images_no_background[:,:,frame])
+    indexes = result.frames == frame
+    plt.scatter(result.xf[indexes]/result.pixel_size,result.yf[indexes]/result.pixel_size)

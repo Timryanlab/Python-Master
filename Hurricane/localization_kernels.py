@@ -130,8 +130,8 @@ extern "C"
             for(int i = 0; i<6; i++){fits[i] -= d_1[i]/d_2[i];} // make the corrections
         } // Finish Fitting Cycle Loop
         // assign final fitting parameters to output vector
-        float x = fits[0]*cos(-ang) - fits[1]*sin(-ang);
-        float y = fits[0]*sin(-ang) - fits[1]*cos(-ang);
+        float x = fits[0]*cos(ang) - fits[1]*sin(ang);
+        float y = fits[0]*sin(ang) - fits[1]*cos(ang);
         fits[0] = x;
         fits[1] = y;
         for(int i= 0; i < 6; i++){fit_array[i+ index*6] = fits[i];}
