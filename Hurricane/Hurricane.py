@@ -160,6 +160,7 @@ def count_peaks(peak_image, blanking = 0, seperator = 190, pixel_width = 5):
             if centers[ind[i],1] >= seperator: #Blanking the right frame  
                 remover.append(i) # If ID should be abandoned add index to list
         return np.delete(centers[ind,:],remover,0)
+        #return centers
     else:
         shift = 0 # Frame shifting variable that allows us to switch behavior between frames
         if blanking == 2: shift = 1 # If we want the first frame to blank on the right, we set shift to 1
@@ -738,12 +739,12 @@ def localize_folder(folder):
         
 #%% Main Workspace
 if __name__ == '__main__':
-    fpath = "D:\\Dropbox\\Data\\7-8-20 actin_in_beas\\lifeact\\" # Folder
+    fpath = "D:\\Dropbox\\Data\\7-17-20 beas actin\\utrophin\\" # Folder
     # get list of image files
     image_files = grab_image_files(fpath)
     
     for file in image_files:
-        file_name = fpath + 'cell_1_higher_power_dz_20_r_0_1.tif'
+        file_name = fpath + file
         result =  localize_image_stack(file_name, 
                                     pixel_size = 0.130, 
                                     gauss_sigma = 2.5, 

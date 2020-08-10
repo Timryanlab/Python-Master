@@ -53,24 +53,21 @@ def visualize_3d_localizations(molecules):
     pcd.colors = o3d.utility.Vector3dVector(selected_point_colors)
     o3d.visualization.draw_geometries([pcd])
 
+def visualize_2d_projection(molecules, size = 10):
+    molecules.separate_colors()
+    plt.scatter(molecules.xf_red,
+                molecules.yf_red, 
+                color = 'red',
+                s = size)
+    plt.scatter( molecules.xf_orange,
+                molecules.yf_orange, 
+                color = 'blue',
+                s = size)
     
-#%%
-if __name__ == '__main__':
-    file_path = 'D:\\Dropbox\\Data\\7-8-20 actin_in_beas\\lifeact\\'
-    file_name = 'cell_1_higher_power_dz_20_r_0_1_localized.pkl'
-    result = load_localizations(file_path + file_name)
-    
-    snr = np.empty((result.xf.shape))
-    for i in range(len(snr)):
-        snr[i] = result.N[i] / (result.N[i] + (result.pixel_width +1)**2*result.o[i])**0.5
-    plt.hist(snr, bins = 100)
-    image = load_image_to_array(file_path + 'cell_1_higher_power_dz_20_r_0_1.tif')
     #%%
-    frame = 240
-    images_no_background, image_background = rolling_ball_subtraction(image,
-                                                               gauss_sigma = 2.5, 
-                                                               rolling_ball_radius = 6,
-                                                               rolling_ball_height= 6)
-    plt.imshow(images_no_background[:,:,frame])
-    indexes = result.frames == frame
-    plt.scatter(result.xf[indexes]/result.pixel_size,result.yf[indexes]/result.pixel_size)
+if __name__ == '__main__':
+    file_path = "D:\\Dropbox\\Data\\7-17-20 beas actin\\utrophin\\"
+    file_name = 'cell_4_dz_20_r_0_3_localized.pkl'
+    result = load_localizations(file_path + file_name)
+    #result.make_z_corrections()
+    visualize_2d_projection(result, 0.1)

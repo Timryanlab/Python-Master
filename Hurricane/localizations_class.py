@@ -35,10 +35,10 @@ def simulate_psf_array(N = 100, rot = 0, pix = 5):
     loc1.split = 0
     for i in range(N):
         # Start by Determining your truths
-        truths[i,0] = np.random.uniform(-1, 1)
-        truths[i,1] = np.random.uniform(-1, 1) # Position
-        x = np.cos(rot)*truths[i,0] - np.sin(rot)*truths[i,1]
-        y = np.sin(rot)*truths[i,0] + np.cos(rot)*truths[i,1]
+        truths[i,0] = np.random.uniform(-1, 1)*0 + 0.8
+        truths[i,1] = np.random.uniform(-1, 1)*0 + 0.6 # Position
+        x = 0
+        y = 0
         truths[i,2] = np.random.uniform(1000, 3000) # Photons
         ind = np.random.randint(0,orange.shape[1]) # Because we're selecting from a curve, we choose a random position
         if truths[i,0] <= loc1.split: # determine calibration based off position
@@ -138,12 +138,12 @@ class Localizations:
         for i in range(self.xf.shape[0]):
             
             if self.color[i]:
-                self.xf[i] -= self.model_orange_x_axial_correction(self.zf[i])
-                self.yf[i] -= self.model_orange_y_axial_correction(self.zf[i])
+                self.xf[i] -= self.model_orange_x_axial_correction(self.zf[i])/self.pixel_width
+                self.yf[i] -= self.model_orange_y_axial_correction(self.zf[i])/self.pixel_width
                 self.zf[i] /= self.orange_refraction_correction
             else:
-                self.xf[i] -= self.model_red_x_axial_correction(self.zf[i])
-                self.yf[i] -= self.model_red_y_axial_correction(self.zf[i])
+                self.xf[i] -= self.model_red_x_axial_correction(self.zf[i])/self.pixel_width
+                self.yf[i] -= self.model_red_y_axial_correction(self.zf[i])/self.pixel_width
                 self.zf[i] /= self.red_refraction_correction
 
         
@@ -256,8 +256,8 @@ if __name__ == '__main__':
     
     loc1 = Localizations('Example')
     loc1.split = 0
-    psfs, truths = simulate_psf_array(10000, rot = 0)
-    fits = fit_psf_array_on_gpu(psfs, rotation = np.pi/2)
+    psfs, truths = simulate_psf_array(100000, rot = np.pi/4)
+    fits = fit_psf_array_on_gpu(psfs, rotation = np.pi/4)
     fits[:,3:4] = np.abs(fits[:,3:4])
     list_of_good_fits = remove_bad_fits(fits)
     keep_vectors = fits[list_of_good_fits,:]
@@ -267,4 +267,4 @@ if __name__ == '__main__':
 
     kept_truths = truths[list_of_good_fits,:]
     plt.hist(kept_truths[:,0] - keep_vectors[:,0], bins = 200)
-    (kept_truths[:,0] - keep_vectors[:,0]).std()
+    print((kept_truths[:,0] - keep_vectors[:,0]).std())

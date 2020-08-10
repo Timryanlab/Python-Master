@@ -77,7 +77,7 @@ if __name__ == '__main__':
     us_county_data_frame.columns
     
     
-    state = 'FL'
+    state = 'NY'
     state_frames = us_county_data_frame.loc[us_county_data_frame['state'] == state]
    
     state_frames['daily_positives'] = np.diff(state_frames['positive'], prepend = 0)
@@ -87,9 +87,8 @@ if __name__ == '__main__':
     state_frames['daily_positive_per_test'] = state_frames['daily_positives']/state_frames['daily_tests']
     state_frames['daily_deaths'] = np.diff(state_frames['death'], prepend = 0)
     ax = state_frames.plot(x = 'str_date', 
-                           y = 'daily_positive_per_test', 
-                           label = 'Daily % of positive tests',
-                           kind = 'bar')
+                           y = 'daily_positives', 
+                           label = 'daily_positives')
 
     ax2 = state_frames.plot(ax = ax,  
                            x = 'str_date', 
