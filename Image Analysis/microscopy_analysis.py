@@ -37,20 +37,20 @@ def normalize_field(image_of_interest, brightfield_image, darkfield_image):
     '''
     corrected_image = image_of_interest.mean(axis=2)
     corrected_image -= darkfield_image[:,:,0]
-    corrected_image /= brightfield_image[:,:,0]
+    corrected_image /= brightfield_image[:,:,0]/65565
     
     return corrected_image
     
 #%
 if __name__ == '__main__':
-    file_path = 'D:\\Dropbox\\Data\\7-2-20 actin-halo in beas\\'
+    file_path = 'D:\\Dropbox\\Data\\9-3-20 fixed beas tubulin_diffraction\\'
     #file_name = 'utrophin_7.tif'
     darkfield_name = 'mean_darkfield.tif'
     brightfield_name = 'mean_brightfield.tif'
     file_names = rio.grab_image_files(file_path)
-    file_names = [file_name, darkfield_name, brightfield_name]
-    file_names.remove(darkfield_name)
-    file_names.remove(brightfield_name)
+#    file_names = [file_name, darkfield_name, brightfield_name]
+    #file_names.remove(darkfield_name)
+    #file_names.remove(brightfield_name)
     files = [file_path + file for file in file_names]
     
     
