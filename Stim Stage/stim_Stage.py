@@ -8,6 +8,7 @@ import serial
 import time
 import pyasi
 import csv
+import os
 from datetime import datetime
 
 class myGui:
@@ -568,6 +569,16 @@ class myGui:
             f.write(str(self.marks[i][0]) + ',' + str(self.marks[i][1]) + ',' + str(self.marks[i][2])+'\n')
         f.close()
 
+def get_scope_number():
+    # Dictionary of scope numbers corresponding to scope login    
+    scope_dict = {
+        'Andrew' : 1, #super-res scope
+        'JIMMY'  : 2, #syn-atp scope
+        'The Bear':3, # 2color diff-limited scope
+        'RyanLab':4 # Widefield casual scope
+    }
+    return scope_dict[os.getlogin()]
+
 root = tk.Tk()
-my = myGui(root,'COM2', 'COM6', 1)
+my = myGui(root,'COM2', 'COM6', get_scope_number())
 root.mainloop()
