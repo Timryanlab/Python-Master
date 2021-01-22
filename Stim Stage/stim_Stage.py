@@ -99,7 +99,10 @@ class myGui:
         self.tdel_entry = tk.Entry(self.cal_frame, textvariable = self.tdel, width =5)
         self.tex_entry = tk.Entry(self.cal_frame, textvariable = self.tex, width =5)
         self.cal_z_entry = tk.Entry(self.cal_frame, textvariable= self.cal_range_z, width =5)
-        
+        self.frames_for_scan = tk.StringVar()
+        self.frames_for_scan.set('1')
+        self.frames_for_scan_entry = tk.Entry(self.cal_frame, textvariable = self.frames_for_scan, width =5)
+        self.frames_for_scan_label = tk.Label(self.cal_frame,text = 'Frames per step')        
         self.cal_dz_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dz, width =5)
         
         self.cal_title = tk.Label(self.cal_frame, text = 'Raster Scan')
@@ -120,7 +123,9 @@ class myGui:
         self.tex_entry.grid(row = 4, column = 0)
         self.tdel_unit.grid(row = 3, column =1)
         self.tex_unit.grid(row = 4, column =1)
-        self.dump_button.grid(row = 3, column = 2)
+        self.frames_for_scan_entry.grid(row = 3, column = 2)
+        self.frames_for_scan_label.grid(row = 3, column = 3)
+
 
     def build_com_box(self):
         # Communication Box
@@ -238,7 +243,7 @@ class myGui:
  
     def channel_calibration(self):
         
-        
+        z_start = self.z.get() # Grab initial z position for after scan placement
         tdel = float(self.tdel.get())
         tex = float(self.tex.get())
         z_range = 10*float(self.cal_range_z.get())
@@ -247,19 +252,23 @@ class myGui:
         # Offset the stage by half
         stng = 'R Z=' + str(-z_range/2 - dz) + '\r'
         pyasi.send_command(self.ser_s,stng)
+
+        frames = int(self.frames_for_scan.get()) # Define a number of frames to get images over
+        
         time.sleep(tdel)
-        for z in range(z_steps):
+        for c in range(z_steps):
             stng = 'R Z='+ str(dz) +'\r'
             
             pyasi.send_command(self.ser_s,stng)
             time.sleep(tdel)
-            ac.send_command(self.ser_arduino,'t')
-            time.sleep(tex)
             
-        time.sleep(tex)
-        
-        
-        strng = 'R Z=' + str(-z_range/2) + '\r'
+            for n in range(frames):
+                ac.send_command(self.ser_arduino,'t')
+                time.sleep(tex+tdel)
+                
+
+        #strng = 'R Z=' + str(-z_range/2) + '\r' $ Relative movement back to where z should be is slightly off, perhaps due to the dz component
+        strng = 'M Z=' + str(z_start) + '\r' # Force movement back to original z
         pyasi.send_command(self.ser_s, strng)
 
     def camera_frame_setup(self):
@@ -367,7 +376,7 @@ class myGui:
         if(self.ser_arduino.in_waiting > 0):
             string = self.ser_arduino.readline()
             self.camera.set(string[0:-1])
-        self.arduino.after(5,self.check_camera)
+        self.arduino.after(1,self.check_camera) # 1 ms check keeps the counter up to par w/ faster imaging experiments
 
     def clear_arduino(self):
         self.ser_arduino.reset_input_buffer()
@@ -407,26 +416,6 @@ class myGui:
             self.external_trigger_button.configure(bg = 'green')
         else:
             self.external_trigger_button.configure(bg = 'magenta')
-    
-    def fix_z(self): 
-        ysteps = int(self.cal_steps_y.get())
-        xsteps = int(self.cal_steps_x.get())
-        dx = 10*float(self.cal_dx.get())
-        dy = 10*float(self.cal_dy.get())
-        z0 = float(self.z.get())
-        strng = 'R X=' + str(xsteps*dx) + '\r'
-        pyasi.send_command(self.ser_s, strng)
-        time.sleep(5)
-        [x,y,z] = pyasi.get_positions(self.ser_s)
-        zx = float(z)
-        self.zx = (zx-z0)/(xsteps*dx)
-        strng = 'R Y=' + str(ysteps*dy) + '\r'
-        pyasi.send_command(self.ser_s, strng)
-        time.sleep(5)
-        [x,y,z] = pyasi.get_positions(self.ser_s)
-        zy = float(z)
-        self.zy = (zy-zx)/(ysteps*dy)
-        strng = 'R X=' + str(-xsteps*dx) +'Y=' + str(-ysteps*dy) + '\r'
 
     def invert(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"i"))
