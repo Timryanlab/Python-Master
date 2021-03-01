@@ -8,6 +8,7 @@ import serial
 import time
 import pyasi
 import csv
+import os
 from datetime import datetime
 
 class myGui:
@@ -87,51 +88,45 @@ class myGui:
     def build_channel_calibration(self):
         self.cal_frame = tk.Frame(self.stage, bd = 2, relief = 'sunken')
         self.channel_button = tk.Button(self.cal_frame, text = "Scan", command = self.channel_calibration)
-        self.cal_steps_x = tk.StringVar()
-        self.cal_steps_y = tk.StringVar()
-        self.cal_dx = tk.StringVar()
-        self.cal_dy = tk.StringVar()
-        self.cal_steps_x.set('10')
-        self.cal_steps_y.set('10')
-        self.cal_dx.set('0.1')
-        self.cal_dy.set('0.1')
+        self.cal_range_z = tk.StringVar()    
+        self.cal_range_z.set('4')
+        self.cal_dz = tk.StringVar()    
+        self.cal_dz.set('0.02')
+        
         self.tdel = tk.StringVar()
-        self.tdel.set('0.2')
+        self.tdel.set('0.01')
         self.tex = tk.StringVar()
-        self.tex.set('0.05')
+        self.tex.set('0.045')
         self.tdel_entry = tk.Entry(self.cal_frame, textvariable = self.tdel, width =5)
         self.tex_entry = tk.Entry(self.cal_frame, textvariable = self.tex, width =5)
-        self.z_correct_button = tk.Button(self.cal_frame, text = 'Z Correct', command = self.fix_z)
-        self.cal_x_entry = tk.Entry(self.cal_frame, textvariable= self.cal_steps_x, width =5)
-        self.cal_y_entry = tk.Entry(self.cal_frame, textvariable= self.cal_steps_y, width =5)
-        self.cal_dx_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dx, width =5)
-        self.cal_dy_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dy, width =5)
+        self.cal_z_entry = tk.Entry(self.cal_frame, textvariable= self.cal_range_z, width =5)
+        self.frames_for_scan = tk.StringVar()
+        self.frames_for_scan.set('1')
+        self.frames_for_scan_entry = tk.Entry(self.cal_frame, textvariable = self.frames_for_scan, width =5)
+        self.frames_for_scan_label = tk.Label(self.cal_frame,text = 'Frames per step')        
+        self.cal_dz_entry = tk.Entry(self.cal_frame, textvariable= self.cal_dz, width =5)
+        
         self.cal_title = tk.Label(self.cal_frame, text = 'Raster Scan')
-        self.cal_x_label = tk.Label(self.cal_frame,text = ' x steps @ ')
-        self.cal_y_label = tk.Label(self.cal_frame,text = ' y steps @ ')
-        self.cal_x_unit = tk.Label(self.cal_frame, text = ' um spacing')
-        self.cal_y_unit = tk.Label(self.cal_frame, text = ' um spacing')
+        self.cal_z_label = tk.Label(self.cal_frame,text = ' z range in um')        
+        self.cal_z_steps = tk.Label(self.cal_frame,text = ' z steps um')  
         self.tdel_unit = tk.Label(self.cal_frame, text = 's Delay')
         self.tex_unit = tk.Label(self.cal_frame, text = 's Exposure')
         self.dump_button = tk.Button(self.cal_frame, text ='DUMP', command = self.dump_stage)
         # Gridding
-        self.cal_x_entry.grid(row=1, column = 0)
-        self.cal_x_label.grid(row=1, column = 1)
-        self.cal_dx_entry.grid(row = 1, column = 2)
-        self.cal_x_unit.grid(row = 1, column = 3)
+        self.cal_z_entry.grid(row=1, column = 0)
+        self.cal_z_label.grid(row=1, column = 1)
+        self.cal_dz_entry.grid(row = 1, column = 2)
+        
 
-        self.cal_y_entry.grid(row=2, column=0)
-        self.cal_y_label.grid(row=2, column=1)
-        self.cal_dy_entry.grid(row=2, column=2)
-        self.cal_y_unit.grid(row=2, column=3)
         self.channel_button.grid(row=1, column = 4, rowspan = 2)
-        self.z_correct_button.grid(row=1, column =5, rowspan =2)
 
         self.tdel_entry.grid(row = 3, column = 0)
         self.tex_entry.grid(row = 4, column = 0)
         self.tdel_unit.grid(row = 3, column =1)
         self.tex_unit.grid(row = 4, column =1)
-        self.dump_button.grid(row = 3, column = 2)
+        self.frames_for_scan_entry.grid(row = 3, column = 2)
+        self.frames_for_scan_label.grid(row = 3, column = 3)
+
 
     def build_com_box(self):
         # Communication Box
@@ -248,43 +243,33 @@ class myGui:
         self.uv_laser_button.grid(row=3, column = 0)
  
     def channel_calibration(self):
-        sign = 1
-        strng = 'B X=0 Y=0\r'
-        pyasi.send_command(self.ser_s, strng)
-        strng = 'KP X=100 Y=100\r'
-        time.sleep(0.05)
-        pyasi.send_command(self.ser_s, strng)
-        strng = 'KI X=5 Y=5\r'
-        time.sleep(0.02)
-        pyasi.send_command(self.ser_s, strng)
-        time.sleep(0.02)
+        
+        z_start = self.z.get() # Grab initial z position for after scan placement
         tdel = float(self.tdel.get())
         tex = float(self.tex.get())
-        ysteps = int(self.cal_steps_y.get())
-        xsteps = int(self.cal_steps_x.get())
-        dx = 10*float(self.cal_dx.get())
-        dy = 10*float(self.cal_dy.get())
-        for y in range(ysteps):
-            time.sleep(tex)
-            for x in range(xsteps):
-                #stng = 'R X='+ str(sign*dx) +' Z='+ str(sign*self.zx) + '\r'
-                stng = 'R X='+ str(sign*dx) +'\r'
-                #print(stng)
-                pyasi.send_command(self.ser_s,stng)
-                time.sleep(tdel)
-                ac.send_command(self.ser_arduino,'t')
-                time.sleep(tex)
-            #pyasi.send_command(self.ser_s,'R Y='+str(dy)+' Z=' + str(self.zy) + '\r')
-            pyasi.send_command(self.ser_s,'R Y='+str(dy)+'\r')
-            #print('R Y='+str(dy)+' Z=' + str(self.zy) + '\r')
-            print(str(100*(1+y)/ysteps))
+        z_range = 10*float(self.cal_range_z.get())
+        dz = 10*float(self.cal_dz.get())
+        z_steps = int(z_range/dz)
+        # Offset the stage by half
+        stng = 'R Z=' + str(-z_range/2 - dz) + '\r'
+        pyasi.send_command(self.ser_s,stng)
+
+        frames = int(self.frames_for_scan.get()) # Define a number of frames to get images over
+        
+        time.sleep(tdel)
+        for c in range(z_steps):
+            stng = 'R Z='+ str(dz) +'\r'
+            
+            pyasi.send_command(self.ser_s,stng)
             time.sleep(tdel)
-            ac.send_command(self.ser_arduino,'t')
-            sign = -1*sign
-        time.sleep(tex)
-        self.stage_reset
-        strng = 'R X='+ str(sign*xsteps*dx*(1-y%2)) +' Y='+str(-dy*(ysteps))+' Z ='+str(-self.zy*ysteps)+'\r'
-        #print(strng)
+            
+            for n in range(frames):
+                ac.send_command(self.ser_arduino,'t')
+                time.sleep(tex+tdel)
+                
+
+        #strng = 'R Z=' + str(-z_range/2) + '\r' $ Relative movement back to where z should be is slightly off, perhaps due to the dz component
+        strng = 'M Z=' + str(z_start) + '\r' # Force movement back to original z
         pyasi.send_command(self.ser_s, strng)
 
     def camera_frame_setup(self):
@@ -392,7 +377,7 @@ class myGui:
         if(self.ser_arduino.in_waiting > 0):
             string = self.ser_arduino.readline()
             self.camera.set(string[0:-1])
-        self.arduino.after(5,self.check_camera)
+        self.arduino.after(1,self.check_camera) # 1 ms check keeps the counter up to par w/ faster imaging experiments
 
     def clear_arduino(self):
         self.ser_arduino.reset_input_buffer()
@@ -432,26 +417,6 @@ class myGui:
             self.external_trigger_button.configure(bg = 'green')
         else:
             self.external_trigger_button.configure(bg = 'magenta')
-    
-    def fix_z(self): 
-        ysteps = int(self.cal_steps_y.get())
-        xsteps = int(self.cal_steps_x.get())
-        dx = 10*float(self.cal_dx.get())
-        dy = 10*float(self.cal_dy.get())
-        z0 = float(self.z.get())
-        strng = 'R X=' + str(xsteps*dx) + '\r'
-        pyasi.send_command(self.ser_s, strng)
-        time.sleep(5)
-        [x,y,z] = pyasi.get_positions(self.ser_s)
-        zx = float(z)
-        self.zx = (zx-z0)/(xsteps*dx)
-        strng = 'R Y=' + str(ysteps*dy) + '\r'
-        pyasi.send_command(self.ser_s, strng)
-        time.sleep(5)
-        [x,y,z] = pyasi.get_positions(self.ser_s)
-        zy = float(z)
-        self.zy = (zy-zx)/(ysteps*dy)
-        strng = 'R X=' + str(-xsteps*dx) +'Y=' + str(-ysteps*dy) + '\r'
 
     def invert(self):
         self.com_response.set(ac.send_command(self.ser_arduino,"i"))
@@ -604,6 +569,16 @@ class myGui:
             f.write(str(self.marks[i][0]) + ',' + str(self.marks[i][1]) + ',' + str(self.marks[i][2])+'\n')
         f.close()
 
+def get_scope_number():
+    # Dictionary of scope numbers corresponding to scope login    
+    scope_dict = {
+        'Andrew' : 1, #super-res scope
+        'JIMMY'  : 2, #syn-atp scope
+        'The Bear':3, # 2color diff-limited scope
+        'RyanLab':4 # Widefield casual scope
+    }
+    return scope_dict[os.getlogin()]
+
 root = tk.Tk()
-my = myGui(root,'COM2', 'COM6', 1)
+my = myGui(root,'COM2', 'COM6', get_scope_number())
 root.mainloop()
