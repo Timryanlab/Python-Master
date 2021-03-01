@@ -77,7 +77,8 @@ class Localizations:
         self.sx_error = np.array([])
         self.sy_error = np.array([])
         # Load Calibration Files
-        cal_fpath = 'C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\'
+        
+        cal_fpath = 'C:\\Users\\' + get_computer_name() + '\\Documents\\GitHub\\Python-Master\\Hurricane\\'
         self.cal_files = [cal_fpath + '3d_calibration.pkl',  # Matlab axial calibration
                           cal_fpath + '2_color_calibration.mat',  # 2 color calibration
                           cal_fpath + 'z_calib.mat'] # Python 3D axial Calibration

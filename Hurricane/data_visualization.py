@@ -63,7 +63,27 @@ def visualize_2d_projection(molecules, size = 10):
                 molecules.yf_orange, 
                 color = 'blue',
                 s = size)
-    
+
+def show_localized_areas(image,center, pixel_width = 5):
+    #This is a function to overlay highlights around the selected pixels
+    m,n = center.shape
+    plt.imshow(image)
+    for i in range(m):
+        x = np.array([center[i,1] - pixel_width ,
+                      center[i,1] + pixel_width ,
+                      center[i,1] + pixel_width ,
+                      center[i,1] - pixel_width ,
+                      center[i,1] - pixel_width ])
+        y = np.array([center[i,0] - pixel_width ,
+                      center[i,0] - pixel_width ,
+                      center[i,0] + pixel_width ,
+                      center[i,0] + pixel_width ,
+                      center[i,0] - pixel_width ])
+        
+        plt.plot(x,y, color='red')
+    plt.show()
+        
+        
     #%%
 if __name__ == '__main__':
     file_path = "D:\\Dropbox\\Data\\7-17-20 beas actin\\utrophin\\"
