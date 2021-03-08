@@ -83,6 +83,16 @@ def show_localized_areas(image,center, pixel_width = 5):
         plt.plot(x,y, color='red')
     plt.show()
         
+def plot_eliptical_angle(psf, angle):
+    plt.imshow(psf)
+    rangle = angle*np.pi/360
+    x = np.array([-np.cos(angle), np.cos(angle)]) 
+    y = np.array([-np.sin(angle), np.sin(angle)]) 
+    x = 5*x + 5
+    y = 5*y + 5
+    plt.plot(x,y)
+    plt.show()
+                         
         
     #%%
 if __name__ == '__main__':
