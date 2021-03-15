@@ -175,9 +175,9 @@ def display_results(gpu_results):
     plt.show()
     
 def test_gpu_fit(N = 100, show = False):
-    t = time.clock()
+    t = time.perf_counter()
     psfs, truths = simulate_psf_array(N)
-    te = time.clock() - t
+    te = time.perf_counter() - t
     print('Simulated took {} s'.format(te))
 
     gpu_fits = fit_psf_array_on_gpu(psfs)
@@ -187,7 +187,7 @@ def test_gpu_fit(N = 100, show = False):
     gpu_results[:,2] /= truths[:,2]
     if show: 
         display_results(gpu_results)
-    print('Final Timing: it took {}s to run all of this'.format(time.clock()-t))
+    print('Final Timing: it took {}s to run all of this'.format(time.perf_counter()-t))
     return gpu_results, truths
 
 
@@ -196,18 +196,18 @@ def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
     N = psf_array.shape[2] # Get number of images to localize
     fits = np.empty((N,6)) # Allocate fits array
     if N <= 2*10**5: # If less than 100k, localize together
-        t0 = time.clock()
+        t0 = time.perf_counter()
         gpu_fits = cp.empty_like(cp.asarray(fits))
         gpu_psf = cp.asarray(psf_array)
         d_rotation = cp.asarray(0*np.ones(fits.shape[0]))
-        t_load = time.clock()
+        t_load = time.perf_counter()
         if N <1024: # Broadcasting rules
             fitting_kernel((N,),(1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
         else:
             fitting_kernel((1024,),( N//1024 + 1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
-        t_fit = time.clock()
+        t_fit = time.perf_counter()
         cpu_fits = cp.asnumpy(gpu_fits)
-        t_return = time.clock()
+        t_return = time.perf_counter()
         
         print(' Localized {} molecules'.format(N))
         print('Timings: Loading onto the GPU took {}s'.format(t_load - t0))
@@ -223,18 +223,18 @@ def fit_psf_array_on_gpu(psf_array, rotation = 0, cycles = 20):
             start = i*2*10**5
             end = np.min([(i+1)*2*10**5,N])
             print('Localizing Molecules {} through {}'.format(start, end))
-            times[i,0]= time.clock()
+            times[i,0]= time.perf_counter()
             gpu_fits = cp.empty_like(cp.asarray(fits[start:end,:]))
             gpu_psf = cp.asarray(psf_array[:,:,start:end])
-            times[i,1] = time.clock()
+            times[i,1] = time.perf_counter()
             d_rotation = cp.asarray(rotation*np.ones(fits.shape[0]))
             if (end-start) <1024: # Broadcasting rules
                 fitting_kernel(((end-start),),(1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
             else:
                 fitting_kernel((1024,),( (end-start)//1024 + 1,),(gpu_psf,gpu_fits, d_rotation, gpu_psf.shape[2], cycles))
-            times[i,2] = time.clock()
+            times[i,2] = time.perf_counter()
             fits[start:end,:] = cp.asnumpy(gpu_fits)
-            times[i,3] = time.clock()
+            times[i,3] = time.perf_counter()
         
         print(' Localization of 200k molecules'.format(N))
         loads = times[:,1] - times[:,0]

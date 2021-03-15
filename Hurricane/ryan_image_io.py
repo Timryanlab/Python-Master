@@ -14,6 +14,9 @@ from PIL import Image
 import matplotlib.pyplot as plt
 #%% Helper Functions
 
+def get_computer_name():
+    return os.getcwd().split('\\')[2]
+
 def image_size(image):    
     """Quick function to ensure we always get 3 indices"""
     #image size
@@ -199,7 +202,6 @@ def show_frame_stack(image_stack, title = 'Image'):
 def grab_image_files(folder):
     """Takes folder path and returns a list of image files only"""
     files = []
-    file_path = 'D:\\Image Processing Folder\\Background Subtractions for Ryan\\'
     all_files = os.listdir(folder)
     for file in all_files:
         if file.find('.tif') + file.find('.fits') > -2:

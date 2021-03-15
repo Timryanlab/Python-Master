@@ -19,6 +19,8 @@ def send_command(ser,cmd,var = None): # Switch Statement
         "p": set_period,
         'a': arm,
         "R": set_repeat, #--KB 
+        "4": uv_laser,
+        "t": toggle_camera,
     }
     func = switch.get(cmd,send_string)
     if(var != None): 
@@ -36,6 +38,9 @@ def send_string(ser,string):
 
 def reset_count(ser):
     ser.write(b"r")
+
+def toggle_camera(ser):
+    ser.write(b"t")
 
 def run_train(ser):
     ser.write(b"S")
@@ -67,3 +72,21 @@ def set_repeat(ser,N): #for repeater--KB
     string = "R" + str(N)
     send_string(ser,string)
 
+def uv_laser(ser):
+    ser.write(b'4')
+
+switch = {
+        "r": reset_count,
+        "S": run_train,
+        "s": set_stim,
+        "w": toggle_switcher,
+        "f": set_frequency,
+        "n": set_stim_number,
+        "P": set_pulse_width,
+        "p": set_period,
+        'a': arm,
+        "R": set_repeat, #--KB 
+        "4": uv_laser,
+        "t": toggle_camera,
+    }
+print(switch)

@@ -156,9 +156,6 @@ def count_peaks(peak_image, blanking = 0, seperator = 190, pixel_width = 5):
     mols = centers.shape[0]
     if blanking ==0:
         remover = []
-        for i in range(mols): # We'll loop over the list of centers and remove
-            if centers[ind[i],1] >= seperator: #Blanking the right frame  
-                remover.append(i) # If ID should be abandoned add index to list
         return np.delete(centers[ind,:],remover,0)
         #return centers
     else:

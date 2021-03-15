@@ -42,13 +42,13 @@ def simulate_psf_array(N = 100, rot = 0, pix = 5):
         truths[i,2] = np.random.uniform(1000, 3000) # Photons
         ind = np.random.randint(0,orange.shape[1]) # Because we're selecting from a curve, we choose a random position
         if truths[i,0] <= loc1.split: # determine calibration based off position
-            truths[i,3] = orange[1,ind]/loc1.pixel_size
-            truths[i,4] = orange[2,ind]/loc1.pixel_size
+            truths[i,3] = 2.5
+            truths[i,4] = 2.5
         else:
-            truths[i,3] = red[1,ind]/loc1.pixel_size
-            truths[i,4] = red[2,ind]/loc1.pixel_size
-        truths[i,3] += np.random.normal(0,0.001) 
-        truths[i,4] += np.random.normal(0,0.001) # Make some noise!
+            truths[i,3] = 2.5
+            truths[i,4] = 2.5
+        truths[i,3] += np.random.normal(0,0.5) 
+        truths[i,4] += np.random.normal(0,0.5) # Make some noise!
         truths[i,5] = np.random.uniform(1, 3) # Offset
         
         # Build your x/y guass components
@@ -77,7 +77,8 @@ class Localizations:
         self.sx_error = np.array([])
         self.sy_error = np.array([])
         # Load Calibration Files
-        cal_fpath = 'C:\\Users\\andre\\Documents\\GitHub\\Python-Master\\Hurricane\\'
+        
+        cal_fpath = 'C:\\Users\\' + get_computer_name() + '\\Documents\\GitHub\\Python-Master\\Hurricane\\'
         self.cal_files = [cal_fpath + '3d_calibration.pkl',  # Matlab axial calibration
                           cal_fpath + '2_color_calibration.mat',  # 2 color calibration
                           cal_fpath + 'z_calib.mat'] # Python 3D axial Calibration
@@ -126,8 +127,8 @@ class Localizations:
         self.frames = frames
         self.color = self.xf >= self.split*self.pixel_size  # given the 2 color system we can use a boolean variable to relay color info
                                        # False = Red channel True = Orange Channel
-        self.get_z_from_widths() # Z assignment
-        self.make_z_corrections() # X-Y corrections based on astigmatism tilt
+        # self.get_z_from_widths() # Z assignment
+        # self.make_z_corrections() # X-Y corrections based on astigmatism tilt
         
         self.xf_error = self.pixel_size*crlb_vectors[:,0]**0.5
         self.yf_error = self.pixel_size*crlb_vectors[:,1]**0.5
@@ -256,8 +257,8 @@ if __name__ == '__main__':
     
     loc1 = Localizations('Example')
     loc1.split = 0
-    psfs, truths = simulate_psf_array(100000, rot = np.pi/4)
-    fits = fit_psf_array_on_gpu(psfs, rotation = np.pi/4)
+    psfs, truths = simulate_psf_array(100000, rot = 0)
+    fits = fit_psf_array_on_gpu(psfs, rotation = 0)
     fits[:,3:4] = np.abs(fits[:,3:4])
     list_of_good_fits = remove_bad_fits(fits)
     keep_vectors = fits[list_of_good_fits,:]
@@ -266,5 +267,5 @@ if __name__ == '__main__':
     loc1.store_fits(keep_vectors, crlb_vectors, np.array(range(keep_vectors.shape[0])))
 
     kept_truths = truths[list_of_good_fits,:]
-    plt.hist(kept_truths[:,0] - keep_vectors[:,0], bins = 200)
-    print((kept_truths[:,0] - keep_vectors[:,0]).std())
+    plt.hist(kept_truths[:,3] - keep_vectors[:,3], bins = 200)
+    print((kept_truths[:,1] - keep_vectors[:,1]).std())

@@ -6,6 +6,8 @@ calibration process, this allows us to build a batch of localizations
 Data: Raw Camera frames of latex-beads where each frame is displaced axially
 by a known amount. Takes entire folder as a single dataset
 Created on Mon Jun  8 09:16:14 2020
+
+
 @author: Andrew Nelson
 """
 #%% Import Libraries
@@ -16,15 +18,15 @@ from rolling_ball_subtraction import *
 from scipy.ndimage import gaussian_filter1d
 from scipy.interpolate import interp1d
 import pickle
-
+from data_visualization import *
+import matplotlib.pyplot as plt
 def collect_psfs_from_folders(folder, pixel_width = 5):
     '''This section takes in an image file, performs the regular pre-localization
     analysis, makes a sum projection, then identifies beads from surrounding area
     Once a bead is identified, it's image is segmented throughout all frames.'''
-    loc1 = Localizations('Testing')
-    pixel_width = loc1.pixel_width
+    split = 187
     # Generate list of image files
-    image_files = grab_image_files(fpath)
+    image_files = grab_image_files(folder)
     # Loop over every image file
     #psfs = cut_out_psfs_from_file(image_files, loc1.pixel_width)
     # Background subtract, maximum project, PSF ID, then PSF segmentation
@@ -33,7 +35,7 @@ def collect_psfs_from_folders(folder, pixel_width = 5):
     offset_index = []
     color = np.array([])
     for file in image_files:
-        image_stack = load_image_to_array(fpath + file)
+        image_stack = load_image_to_array(folder + file)
         # Image is loaded
         background_subtracted_image_stack, bkgns =  rolling_ball_subtraction(image_stack,
                                                                          gauss_sigma = 2.5, 
@@ -42,10 +44,10 @@ def collect_psfs_from_folders(folder, pixel_width = 5):
         m,n,o = image_size(image_stack)
         # Sum overall frames for psf detection
         image_stack[:,:,0] = background_subtracted_image_stack.sum(axis=2)
-        image_stack[:5,:,0] = 0
-        image_stack[-5:,:,0] = 0
-        image_stack[:,:5,0] = 0
-        image_stack[:,-5:,0] = 0
+        image_stack[:10,:,0] = 0
+        image_stack[-10:,:,0] = 0
+        image_stack[:,:10,0] = 0
+        image_stack[:,-10:,0] = 0
         waves = wavelet_denoising(image_stack[:,:,0:1])
         # Get a boolean map of peaks above threshold
         image2 = find_peaks(waves, threshold = 1000)
@@ -55,22 +57,26 @@ def collect_psfs_from_folders(folder, pixel_width = 5):
         psf_peaks = centers[centers[:,2]==0,:]
         
         # Cut out all PSF images from background_subtracted_stacks
-        color = np.append(color,psf_peaks[:,1] >= loc1.split) # Color Identifcation system 
-        
+        color = np.append(color,psf_peaks[:,1] >= split) # Color Identifcation system 
+        print(file)
         for peak in psf_peaks:
-            psf_array = np.empty((2*pixel_width+1,2*pixel_width+1,o))
-            index_array = np.empty((o,2))
-            for frame in range(o):
+            psf_array = np.empty((2*pixel_width+1,2*pixel_width+1,round(o/2)))
+            index_array = np.empty((round(o/2),2))
+            shift = 1
+            if peak[1] >= split:
+                shift = 0
+            for frame in range(round(o/2)):
+                color_frame = 2*frame + shift
                 roi = background_subtracted_image_stack[peak[0]-pixel_width:peak[0]+pixel_width+1, # row
                                                         peak[1]-pixel_width:peak[1]+pixel_width+1, # col
-                                                        frame] # frame
+                                                        color_frame] # frame
                 # Refocus on the brightest pixel in the frame and record the shift
                 index_array[frame,:] = np.argwhere(roi == roi.max())[0]
                 # Our Identification algorithm will grab the bright pixel, so we should try to match
                 psf_array[:,:,frame] = background_subtracted_image_stack[int(peak[0] - pixel_width + index_array[frame,0] - pixel_width):int(peak[0] - pixel_width + index_array[frame,0] + pixel_width + 1), # row
                                                                          int(peak[1] - pixel_width + index_array[frame,1] - pixel_width):int(peak[1] - pixel_width + index_array[frame,1] + pixel_width + 1), # col
-                                                                         frame] # frame
-                
+                                                                         color_frame] # frame
+            
             # Append this list of bright, centered PSFs    
             psfs.append(psf_array)
             offset_index.append(index_array)
@@ -182,14 +188,14 @@ def get_fitting_data(psfs, orange_angle, red_angle, color, offset_index):
 
 def correlate_axial_curves(locs, color, step_size_in_nanometer = 20):
     successful_fits = []
-    #%% Show some Z stuff
+    # Show some Z stuff
     for i in range(len(psfs)):
         successful_fits.append(locs[i].sx.shape[0])
     
     successful_fits = np.array(successful_fits)
    
 
-    #%% Synchronize Scans
+    # Synchronize Scans
     # First we have to choose a reference scan to correlate the others to
     # Given that we have multi-color data, this will have to be taken into account
     # Take reference scan for each color determined by number of successful fits
@@ -197,14 +203,14 @@ def correlate_axial_curves(locs, color, step_size_in_nanometer = 20):
     
     # Please watch as I do some fancy index swapping
     red_molecules = np.argwhere(color == 0)
-    red_index = np.where(successful_fits[red_molecules] == 100)[0][0]
+    red_index = np.where(successful_fits[red_molecules] == successful_fits[red_molecules].max())[0][0]
     orange_molecules = np.argwhere(color == 1)
-    orange_index = np.where(successful_fits[orange_molecules] == 100)[0][0]
+    orange_index = np.where(successful_fits[orange_molecules] == successful_fits[orange_molecules].max())[0][0]
     
     # These next lines will be the models from which we will correlate everyone else
     red_model = locs[red_molecules[red_index][0]]
     orange_model = locs[orange_molecules[orange_index][0]]
-    #%%
+  
     for i in range(len(locs)):
         loc = locs[i]
         # Build the reference sigma equations
@@ -262,7 +268,7 @@ def build_axial_sigma_models(locs, results_to_save, color):
             all_red_x_sigmas = np.append(all_red_x_sigmas, loc.sx)
             all_red_y_sigmas = np.append(all_red_y_sigmas, loc.sy)
     # Hey at this point we can treat all of these together because they're independent now
-    #%%
+    
     list_of_unique_orange_zs = np.unique(all_orange_zs)
     list_of_unique_red_zs = np.unique(all_red_zs)
     
@@ -317,24 +323,25 @@ def build_axial_sigma_models(locs, results_to_save, color):
     
 #%% Main Workspace
 if __name__ == '__main__':
-    fpath = 'D:\\Dropbox\\Data\\1-6-20 channel calibration\\zscan\\'
+    folder = 'G:\\Dropbox\\Data\\1-23-21 calibration\\'
     #fpath = 'D:\\Dropbox\\Data\\6-23-20 calibrations\\Pre_prepped_images\\'
     # We are storing regularly used values in the localization class
-    step_size_in_nanometer = 20
-    psfs, offset_index, color = collect_psfs_from_folders(fpath)
+    step_size_in_nanometer = 50
+    psfs, offset_index, color = collect_psfs_from_folders(folder)
     # At this point, PSFS should be a list of numpy arrays that contain the PSFS that will subsequently be fitted
     # Meanwhile color should be a boolean list of the same size representing color of the psf, which determines the 
     # final fit calibration
-    #%%
-    orange_angle, red_angle = determine_elipticity_for_channels(psfs, color)
     
+    # orange_angle, red_angle = determine_elipticity_for_channels(psfs, color)
+    orange_angle = 0
+    red_angle = 0
     # We can stor results in a dictionary
     results_to_save = {'orange_angle' : orange_angle,
                        'red_angle' : red_angle}
     
     # Fit those PSFs
     locs = get_fitting_data(psfs, orange_angle, red_angle, color, offset_index)
-    
+    #%%
     correlate_axial_curves(locs, color, step_size_in_nanometer) 
     
     build_axial_sigma_models(locs, results_to_save, color)
