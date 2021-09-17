@@ -33,8 +33,15 @@ if __name__ == '__main__':
     image_file = folder + image_name
     image_stack = rio.load_image_to_array(image_file)
     #%% post image loading
-    
+    x = np.array([])
+    y = np.array([])
     
     for roi in rois:
-        print(rois[roi]['left'])
-        print(rois[roi]['top'])
+        x = np.append(x,rois[roi]['left'])
+        y = np.append(y,rois[roi]['top'])
+    print(x,y)
+    #%%
+    plt.imshow(image_stack.mean(2))
+    plt.scatter(x,y,1)
+    plt.show()
+    plt.imshow(image_stack.mean(2))
